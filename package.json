@@ -1,0 +1,23 @@
+{
+  "name": "program2",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "concurrently \"node server.js\" \"npm start --prefix frontend\"",
+    "start:backend": "node server.js",
+    "start:frontend": "npm start --prefix frontend",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "pg": "^8.16.2"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0"
+  }
+}
