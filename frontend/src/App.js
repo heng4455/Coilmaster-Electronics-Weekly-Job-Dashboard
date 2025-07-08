@@ -69,7 +69,7 @@ function App() {
 
         // Fetch jobs always
         console.log('Attempting to fetch jobs...');
-        const { data: jobsData, error: jobsError } = await supabase.from('jobs').select('*').order('created_at', { ascending: false });
+        const { data: jobsData, error: jobsError } = await supabase.from('jobs').select('*').order('created_at', { ascending: true });
         console.log('Jobs fetch result:', { data: jobsData, error: jobsError });
         if (jobsError) throw jobsError;
         setJobs(jobsData || []);
@@ -105,6 +105,14 @@ function App() {
     };
 
     fetchData();
+
+    // เพิ่ม event listener สำหรับ window focus เพื่อโหลดข้อมูลใหม่เมื่อแท็บกลับมาทำงาน
+    window.addEventListener('focus', fetchData);
+
+    // Cleanup function: ลบ event listener เมื่อ component unmount
+    return () => {
+      window.removeEventListener('focus', fetchData);
+    };
   }, [user]);
 
   // คำนวณเปอร์เซ็นต์สำเร็จ (ถ้าไม่มีงานเลย ให้แสดง 100%)
@@ -257,7 +265,7 @@ function App() {
     console.log('พยายามลบงาน id:', id);
     const { error } = await supabase.from('jobs').delete().eq('id', id);
     if (!error) {
-      const { data: jobsData, error: jobsError } = await supabase.from('jobs').select('*').order('created_at', { ascending: false });
+      const { data: jobsData, error: jobsError } = await supabase.from('jobs').select('*').order('created_at', { ascending: true });
       if (!jobsError) {
         setJobs(jobsData || []);
       } else {
@@ -288,14 +296,10 @@ function App() {
           status: 'ดำเนินการอยู่', // ตั้งสถานะเริ่มต้นเป็น 'ดำเนินการอยู่'
         })
         .select();
-      if (!error) {
-        setJobs([data[0], ...jobs]);
-        setNewJob('');
-        setNewRemark(''); // ล้างช่อง assignee ด้วย
-      } else {
-        alert('เกิดข้อผิดพลาดในการเพิ่มงาน: ' + (error.message || 'ไม่ทราบสาเหตุ'));
-        console.error('Error adding job:', error);
-      }
+      if (error) throw error;
+      setJobs([...jobs, data[0]]);
+      setNewJob('');
+      setNewRemark(''); // ล้างช่อง assignee ด้วย
     }
   };
 
@@ -356,7 +360,7 @@ function App() {
       console.error('Error saving remark:', error);
     } else {
       // รีโหลด jobs เพื่อแสดงข้อมูลล่าสุด
-      const { data: jobsData, error: jobsError } = await supabase.from('jobs').select('*').order('created_at', { ascending: false });
+      const { data: jobsData, error: jobsError } = await supabase.from('jobs').select('*').order('created_at', { ascending: true });
       if (!jobsError) {
         setJobs(jobsData || []);
       } else {
