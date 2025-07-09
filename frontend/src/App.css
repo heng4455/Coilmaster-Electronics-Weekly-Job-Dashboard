@@ -46,9 +46,9 @@ h1 {
 
 table {
   width: 100%;
-  min-width: 1100px;
   border-collapse: separate;
   border-spacing: 0;
+  table-layout: fixed; /* เพิ่มบรรทัดนี้ */
   margin-bottom: 32px;
   background: #f9fafb;
   border-radius: 8px;
@@ -62,7 +62,11 @@ td {
   padding: 12px 8px;
   text-align: center;
   border: 1px solid #cce5ff;
+  box-sizing: border-box; /* เพิ่มบรรทัดนี้ */
+  overflow: hidden; /* เพิ่มบรรทัดนี้ */
   }
+/* กำหนดความกว้างของแต่ละคอลัมน์ */
+
 th {
   color: #1976d2;
   font-weight: 600;
@@ -90,11 +94,14 @@ tr:nth-child(odd) {
   background: #fff;
 }
 td button {
+  width: 100%; /* ทำให้ปุ่มมีความกว้างเต็มเซลล์ */
+  box-sizing: border-box; /* รวม padding และ border ใน width */
+  display: block; /* เพิ่มบรรทัดนี้ */
   background: #43a047;
   color: #fff;
   border: none;
   border-radius: 5px;
-  padding: 6px 14px;
+  padding: 6px 4px; /* ลด padding แนวนอนลงอีก */
   cursor: pointer;
   font-size: 0.95rem;
   transition: background 0.2s;
@@ -109,6 +116,17 @@ td button.button-on-process {
 td button.button-on-process:hover {
   background: #ffa000;
   box-shadow: 0 4px 8px rgba(255, 160, 0, 0.6); /* เพิ่มเงาเมื่อโฮเวอร์ */
+}
+
+td select {
+  width: 100%; /* ทำให้ select มีความกว้างเต็มเซลล์ */
+  box-sizing: border-box; /* รวม padding และ border ใน width */
+  display: block; /* เพิ่มบรรทัดนี้ */
+  padding: 6px 4px; /* ปรับ padding ให้พอดี */
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 0.95rem;
+  height: auto; /* กำหนด height เป็น auto */
 }
 
 .pie-chart {
@@ -207,6 +225,94 @@ td button.button-on-process:hover {
   font-size: 0.98rem;
 }
 
+/* button-on-process */
+.button-on-process {
+  background-color: #ffe082; /* สีเหลืองอ่อน */
+  color: #333;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+}
+
+.button-on-process:hover {
+  background-color: #ffd54f; /* สีเหลืองเข้มขึ้นเมื่อ hover */
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* button-delete (ปุ่มลบงานเมื่อเสร็จสิ้น) */
+.button-delete {
+  background-color: #81c784; /* สีเขียวอ่อน */
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+}
+
+.button-delete:hover {
+  background-color: #66bb6a; /* สีเขียวเข้มขึ้นเมื่อ hover */
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Animation for job row completion */
+/*
+.job-completed-fade-out {
+  opacity: 0; /* ทำให้จางหายไป */
+  /* ระยะเวลาการเปลี่ยนผ่าน */
+/*
+}
+*/
+
+/* Animations for CSSTransition (move, enter, exit) */
+/*
+.job-item-enter {
+  opacity: 0;
+  transform: translateY(-20px);
+}
+
+.job-item-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 300ms ease-out, transform 300ms ease-out;
+}
+
+.job-item-exit {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.job-item-exit-active {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 300ms ease-out, transform 300ms ease-out;
+}
+
+.job-item-move {
+  transition: transform 500ms ease-in-out; /* สำหรับการเคลื่อนที่ของแถว */
+/*
+}
+*/
+
+/* ลบกำหนดความกว้างของแต่ละคอลัมน์ (ถ้ามีเหลืออยู่) */
+/*
+th:nth-child(1), td:nth-child(1) { width: 5%; }
+th:nth-child(2), td:nth-child(2) { width: 25%; }
+th:nth-child(3), td:nth-child(3) { width: 10%; }
+th:nth-child(4), td:nth-child(4) { width: 10%; }
+th:nth-child(5), td:nth-child(5) { width: 10%; }
+th:nth-child(6), td:nth-child(6) { width: 10%; }
+th:nth-child(7), td:nth-child(7) { width: 15%; }
+th:nth-child(8), td:nth-child(8) { width: 8%; }
+th:nth-child(9), td:nth-child(9) { width: 7%; }
+*/
+
 @media (max-width: 768px) {
   .App {
     padding: 20px 15px;
@@ -226,7 +332,6 @@ td button.button-on-process:hover {
   }
 
   table {
-    min-width: 700px; /* ให้มี min-width เพื่อให้ scroll ได้ */
     font-size: 0.85rem;
   }
 
