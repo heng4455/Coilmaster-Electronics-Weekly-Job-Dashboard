@@ -7,6 +7,7 @@ function App() {
   const [profiles, setProfiles] = useState([]);
   const [newJob, setNewJob] = useState('');
   const [newRemark, setNewRemark] = useState('');
+  const [newEstimatedCompletionDate, setNewEstimatedCompletionDate] = useState(''); // เพิ่ม state ใหม่สำหรับวันที่คาดว่าจะเสร็จ
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -284,6 +285,7 @@ function App() {
 
     const newJobTitle = newJob.trim();
     const newJobAssignee = newRemark.trim(); // ใช้ newRemark เป็น Assignee
+    const newJobEstimatedCompletionDate = newEstimatedCompletionDate.trim(); // ใช้ newEstimatedCompletionDate เป็น estimated_completion_date
 
     if (newJobTitle) {
       const { data, error } = await supabase
@@ -294,12 +296,14 @@ function App() {
           user_id: user.id, // กำหนด user_id ของงานเป็น id ของ user ที่ login
           assigned_date: new Date().toISOString().slice(0, 10), // เพิ่ม assigned_date
           status: 'ดำเนินการอยู่', // ตั้งสถานะเริ่มต้นเป็น 'ดำเนินการอยู่'
+          estimated_completion_date: newJobEstimatedCompletionDate || null, // เพิ่ม estimated_completion_date
         })
         .select();
       if (error) throw error;
       setJobs([...jobs, data[0]]);
       setNewJob('');
       setNewRemark(''); // ล้างช่อง assignee ด้วย
+      setNewEstimatedCompletionDate(''); // ล้างช่อง estimated_completion_date ด้วย
     }
   };
 
@@ -401,6 +405,13 @@ function App() {
           onChange={e => setNewRemark(e.target.value)}
           disabled={!user}
         />
+        <input // เพิ่มช่องกรอกวันที่คาดว่าจะเสร็จ
+          type="date"
+          placeholder="วันที่คาดว่าจะเสร็จ"
+          value={newEstimatedCompletionDate}
+          onChange={e => setNewEstimatedCompletionDate(e.target.value)}
+          disabled={!user}
+        />
         <button onClick={handleAddJob} disabled={!user}>เพิ่มหัวข้อ</button>
       </div>
       {loading ? (
@@ -414,6 +425,7 @@ function App() {
                 <th>เนื้อหางาน</th>
                 <th>ผู้รับผิดชอบ</th>
                 <th>วันที่ได้รับงาน</th>
+                <th>วันที่คาดว่าจะเสร็จ</th>
                 <th>วันที่เสร็จ</th>
                 <th>สถานะ</th>
                 <th>หมายเหตุ</th>
@@ -427,6 +439,7 @@ function App() {
                   <td dangerouslySetInnerHTML={{ __html: job.title.replace(/\n/g, '<br/>') }} />
                   <td>{job.assignee || '-'}</td>
                   <td>{job.assigned_date || '-'}</td>
+                  <td>{job.estimated_completion_date || '-'}</td>
                   <td>{job.completed_date || '-'}</td>
                   <td>
                     <select
