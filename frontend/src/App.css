@@ -1,0 +1,361 @@
+body {
+  background: #f4f8fb;
+  font-family: 'Prompt', Arial, sans-serif;
+}
+
+.App {
+  max-width: 1200px;
+  margin: 40px auto;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  padding: 32px 24px 24px 24px;
+}
+
+h1 {
+  color: #1976d2;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.add-job {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  justify-content: center;
+}
+.add-job input {
+  padding: 8px 12px;
+  border: 1px solid #b0bec5;
+  border-radius: 6px;
+  font-size: 1rem;
+}
+.add-job button {
+  background: #1976d2;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 18px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.add-job button:hover {
+  background: #1565c0;
+}
+
+.add-job .export-button {
+  background: #4CAF50; /* Green color */
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 18px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s;
+  margin-left: 10px; /* ย้ายจาก inline style */
+}
+
+.add-job .export-button:hover {
+  background: #45a049;
+}
+
+table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed; /* เพิ่มบรรทัดนี้ */
+  margin-bottom: 32px;
+  background: #f9fafb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+thead {
+  background: #e3f2fd;
+}
+th,
+td {
+  padding: 12px 8px;
+  text-align: center;
+  border: 1px solid #cce5ff;
+  box-sizing: border-box; /* เพิ่มบรรทัดนี้ */
+  overflow: hidden; /* เพิ่มบรรทัดนี้ */
+  }
+/* กำหนดความกว้างของแต่ละคอลัมน์ */
+
+th {
+  color: #1976d2;
+  font-weight: 600;
+  background: #bbdefb;
+}
+td {
+  color: #333;
+}
+tr:first-child th:first-child {
+  border-top-left-radius: 8px;
+}
+tr:first-child th:last-child {
+  border-top-right-radius: 8px;
+}
+tr:last-child td:first-child {
+  border-bottom-left-radius: 8px;
+}
+tr:last-child td:last-child {
+  border-bottom-right-radius: 8px;
+}
+tr:nth-child(even) {
+  background: #f1f8ff;
+}
+tr:nth-child(odd) {
+  background: #fff;
+}
+td button {
+  width: 100%; /* ทำให้ปุ่มมีความกว้างเต็มเซลล์ */
+  box-sizing: border-box; /* รวม padding และ border ใน width */
+  display: block; /* เพิ่มบรรทัดนี้ */
+  background: #43a047;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  padding: 6px 4px; /* ลด padding แนวนอนลงอีก */
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: background 0.2s;
+}
+td button:hover {
+  background: #2e7d32;
+}
+td button.button-on-process {
+  background: #ffc107; /* Yellow color */
+  box-shadow: 0 2px 4px rgba(255, 193, 7, 0.4); /* เพิ่มเงาให้ดูมันวาว */
+}
+td button.button-on-process:hover {
+  background: #ffa000;
+  box-shadow: 0 4px 8px rgba(255, 160, 0, 0.6); /* เพิ่มเงาเมื่อโฮเวอร์ */
+}
+
+td select {
+  width: 100%; /* ทำให้ select มีความกว้างเต็มเซลล์ */
+  box-sizing: border-box; /* รวม padding และ border ใน width */
+  display: block; /* เพิ่มบรรทัดนี้ */
+  padding: 6px 4px; /* ปรับ padding ให้พอดี */
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 0.95rem;
+  height: auto; /* กำหนด height เป็น auto */
+}
+
+.pie-chart {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 16px;
+}
+.pie-chart svg {
+  margin-bottom: 8px;
+}
+.pie-chart div {
+  font-size: 1.1rem;
+  color: #1976d2;
+  font-weight: 500;
+}
+
+.modal-backdrop {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.25);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal {
+  background: #fff;
+  border-radius: 10px;
+  padding: 32px 28px 24px 28px;
+  width: 100%;
+  max-width: 400px;
+  min-width: 0;
+  box-shadow: 0 4px 32px rgba(0,0,0,0.18);
+  position: relative;
+  animation: modal-in 0.2s;
+}
+@keyframes modal-in {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.modal-close {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: #888;
+  cursor: pointer;
+}
+.modal input {
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border: 1px solid #b0bec5;
+  border-radius: 6px;
+  font-size: 1rem;
+}
+.modal button[type="submit"] {
+  width: 100%;
+  background: #1976d2;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 0;
+  font-size: 1rem;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.modal button[type="submit"]:hover {
+  background: #1565c0;
+}
+.modal-link {
+  text-align: center;
+  color: #1976d2;
+  font-size: 0.98rem;
+  margin-bottom: 8px;
+  }
+.modal-link span {
+  cursor: pointer;
+  text-decoration: underline;
+  margin: 0 4px;
+}
+.modal-error {
+  color: #d32f2f;
+  text-align: center;
+  margin-top: 6px;
+  font-size: 0.98rem;
+}
+.modal-success {
+  color: #388e3c;
+  text-align: center;
+  margin-top: 6px;
+  font-size: 0.98rem;
+}
+
+/* button-on-process */
+.button-on-process {
+  background-color: #ffe082; /* สีเหลืองอ่อน */
+  color: #333;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+}
+
+.button-on-process:hover {
+  background-color: #ffd54f; /* สีเหลืองเข้มขึ้นเมื่อ hover */
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* button-delete (ปุ่มลบงานเมื่อเสร็จสิ้น) */
+.button-delete {
+  background-color: #81c784; /* สีเขียวอ่อน */
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+}
+
+.button-delete:hover {
+  background-color: #66bb6a; /* สีเขียวเข้มขึ้นเมื่อ hover */
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Animation for job row completion */
+/*
+.job-completed-fade-out {
+  opacity: 0; /* ทำให้จางหายไป */
+  /* ระยะเวลาการเปลี่ยนผ่าน */
+/*
+}
+*/
+
+/* Animations for CSSTransition (move, enter, exit) */
+/*
+.job-item-enter {
+  opacity: 0;
+  transform: translateY(-20px);
+}
+
+.job-item-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 300ms ease-out, transform 300ms ease-out;
+}
+
+.job-item-exit {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.job-item-exit-active {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 300ms ease-out, transform 300ms ease-out;
+}
+
+.job-item-move {
+  transition: transform 500ms ease-in-out; /* สำหรับการเคลื่อนที่ของแถว */
+/*
+}
+*/
+
+/* ลบกำหนดความกว้างของแต่ละคอลัมน์ (ถ้ามีเหลืออยู่) */
+/*
+th:nth-child(1), td:nth-child(1) { width: 5%; }
+th:nth-child(2), td:nth-child(2) { width: 25%; }
+th:nth-child(3), td:nth-child(3) { width: 10%; }
+th:nth-child(4), td:nth-child(4) { width: 10%; }
+th:nth-child(5), td:nth-child(5) { width: 10%; }
+th:nth-child(6), td:nth-child(6) { width: 10%; }
+th:nth-child(7), td:nth-child(7) { width: 15%; }
+th:nth-child(8), td:nth-child(8) { width: 8%; }
+th:nth-child(9), td:nth-child(9) { width: 7%; }
+*/
+
+@media (max-width: 768px) {
+  .App {
+    padding: 20px 15px;
+  }
+
+  h1 {
+    font-size: 1.8rem;
+  }
+
+  .add-job {
+    flex-direction: column;
+    align-items: center;
+  }
+  .add-job input, .add-job textarea {
+    width: 100%;
+    max-width: 90%;
+  }
+
+  table {
+    font-size: 0.85rem;
+  }
+
+  th, td {
+    padding: 8px 5px;
+  }
+
+  .modal {
+    margin: 15px;
+  }
+}
