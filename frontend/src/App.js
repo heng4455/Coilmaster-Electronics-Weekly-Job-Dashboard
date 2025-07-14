@@ -1,6 +1,11 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 import { supabase } from './supabaseClient';
+import fileDownload from 'js-file-download';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
+
 // import { TransitionGroup } from 'react-transition-group'; // ลบบรรทัดนี้ออก หรือคอมเมนต์ไว้
 
 function App() {
@@ -17,6 +22,10 @@ function App() {
   const [errorMsg, setErrorMsg] = useState('');
   const [editingRemarkId, setEditingRemarkId] = useState(null);
   const [animatingJobId, setAnimatingJobId] = useState(null); // State สำหรับควบคุม Animation
+
+
+  const jobRefs = useRef({}); // สร้าง ref สำหรับเก็บ DOM element ของแต่ละงาน
+
 
   // โหลด user ปัจจุบัน
   useEffect(() => {
@@ -99,6 +108,11 @@ function App() {
         if (jobsError) throw jobsError;
         setJobs(sortJobs(jobsData) || []); // ใช้ sortJobs ตรงนี้
         console.log('jobsRes (inside then):', { data: jobsData, error: jobsError });
+
+        // Debugging: Log type of job IDs
+        if (jobsData && jobsData.length > 0) {
+          console.log('First job ID and its type:', jobsData[0].id, typeof jobsData[0].id);
+        }
 
       } catch (err) {
         setErrorMsg('เกิดข้อผิดพลาดในการโหลดข้อมูล: ' + err.message);
@@ -267,6 +281,21 @@ function App() {
     return `${year.slice(2)}/${month}/${day}`;
   };
 
+  const formatDateTimeForCSV = (dateString) => {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+      return 'Invalid Date';
+    }
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+  };
+
   // ฟังก์ชันจัดเรียงงานตามความสำคัญ
   const sortJobs = (jobsArray) => {
     return [...jobsArray].sort((a, b) => {
@@ -385,63 +414,77 @@ function App() {
       return;
     }
 
-    const { data, error } = await supabase
+    console.log(`Attempting to update job ${jobId} to status: ${newStatus}, completed_date: ${completedDate}`);
+    const { data: updatedJob, error } = await supabase
       .from('jobs')
       .update({ status: newStatus, completed_date: completedDate })
-      .eq('id', jobId);
+      .eq('id', jobId)
+      .select();
 
-    if (!error) {
-      if (newStatus === 'เสร็จแล้ว') {
-        // อัปเดตสถานะใน local state ก่อนเพื่อเริ่ม Animation
-        setJobs(jobs.map(j => j.id === jobId ? { ...j, status: newStatus, completed_date: completedDate } : j));
-        setAnimatingJobId(jobId); // เริ่ม Animation fade-out
-        
-        // ส่งการอัปเดตไปยัง Supabase (ไม่ต้องรอผล) 
-        // ไม่ต้อง await ตรงนี้ เพื่อไม่ให้ block UI และให้ Animation ทำงานก่อน
-        supabase
-          .from('jobs')
-          .update({ status: newStatus, completed_date: completedDate })
-          .eq('id', jobId);
+    if (error) {
+      console.error('Error updating status to Supabase:', error);
+      alert('เกิดข้อผิดพลาดในการเปลี่ยนสถานะ: ' + error.message);
+      return; // Exit if update fails
+    }
 
-        setTimeout(async () => {
-          // รีโหลด jobs เพื่อให้แน่ใจว่าเรียงลำดับถูกต้องหลังจาก Animation
+    console.log(`Supabase update successful for job ${jobId}. Data:`, updatedJob);
+
+    if (newStatus === 'เสร็จแล้ว') {
+      // อัปเดตสถานะใน local state ก่อนเพื่อเริ่ม Animation
+      setJobs(jobs.map(j => j.id === jobId ? { ...j, status: newStatus, completed_date: completedDate } : j));
+      setAnimatingJobId(jobId); // เริ่ม Animation fade-out
+      
+      // ส่งการอัปเดตไปยัง Supabase (ไม่ต้องรอผล) 
+      // ไม่ต้อง await ตรงนี้ เพื่อไม่ให้ block UI และให้ Animation ทำงานก่อน
+      setTimeout(async () => {
+        if (updatedJob && updatedJob.length > 0) {
+          // ใช้ข้อมูลที่อัปเดตแล้วจาก Supabase โดยตรง ไม่ต้อง re-fetch ทั้งหมด
+          const newJobsState = jobs.map(j => j.id === updatedJob[0].id ? updatedJob[0] : j);
+          setJobs(sortJobs(newJobsState) || []); // ใช้ sortJobs ตรงนี้
+          console.log('Jobs state updated for "เสร็จแล้ว" status with updated job data.');
+
+          // เลื่อนไปยัง job ที่เสร็จแล้วหลังจากโหลดและจัดเรียงใหม่
+          if (jobRefs.current[jobId]) {
+            jobRefs.current[jobId].scrollIntoView({
+              behavior: 'smooth',
+              block: 'end'
+            });
+          }
+        } else {
+          // Fallback: If updatedJob is null/empty (shouldn't happen with .select()), re-fetch
+          console.warn('Updated job data was null or empty after .select(). Re-fetching all jobs.');
           const { data: jobsData, error: jobsError } = await supabase.from('jobs')
             .select('*')
-            .order('created_at', { ascending: true }); // ดึงมาตาม created_at ก่อน แล้วค่อยมาเรียง client-side
+            .order('created_at', { ascending: true });
           if (!jobsError) {
-            setJobs(sortJobs(jobsData) || []); // ใช้ sortJobs ตรงนี้
+            setJobs(sortJobs(jobsData) || []);
+            console.log('Jobs state updated for "เสร็จแล้ว" status with sorted data (full reload).');
+            if (jobRefs.current[jobId]) {
+              jobRefs.current[jobId].scrollIntoView({
+                behavior: 'smooth',
+                block: 'end'
+              });
+            }
           } else {
             alert('เกิดข้อผิดพลาดในการโหลดงานใหม่หลังจากเปลี่ยนสถานะ (หลัง Animation): ' + jobsError.message);
             console.error('Error fetching jobs after status update (post-animation):', jobsError);
           }
-          setAnimatingJobId(null); // ลบ animatingJobId ออกเมื่อ Animation เสร็จสิ้น
-        }, 500); // หน่วงเวลา 500ms ให้ตรงกับ CSS transition
-      } else {
-        // หากเปลี่ยนสถานะอื่นที่ไม่ใช่ 'เสร็จแล้ว' ให้รีโหลดและจัดเรียงทันที
-        // และยังคงส่งอัปเดตไป Supabase โดยไม่ใช้ setTimeout
-        const { data: updatedSupabase, error: updateError } = await supabase
-          .from('jobs')
-          .update({ status: newStatus, completed_date: completedDate })
-          .eq('id', jobId);
-
-        if (!updateError) {
-          const { data: jobsData, error: jobsError } = await supabase.from('jobs')
-            .select('*')
-            .order('created_at', { ascending: true }); 
-          if (!jobsError) {
-            setJobs(sortJobs(jobsData) || []);
-          } else {
-            alert('เกิดข้อผิดพลาดในการโหลดงานใหม่หลังจากเปลี่ยนสถานะ: ' + jobsError.message);
-            console.error('Error fetching jobs after status update:', jobsError);
-          }
-        } else {
-          alert('เกิดข้อผิดพลาดในการเปลี่ยนสถานะ: ' + updateError.message);
-          console.error('Error updating status:', updateError);
         }
-      }
+        setAnimatingJobId(null); // ลบ animatingJobId ออกเมื่อ Animation เสร็จสิ้น
+      }, 500); // หน่วงเวลา 500ms ให้ตรงกับ CSS transition
     } else {
-      alert('เกิดข้อผิดพลาดในการเปลี่ยนสถานะ: ' + error.message);
-      console.error('Error updating status:', error);
+      // หากเปลี่ยนสถานะอื่นที่ไม่ใช่ 'เสร็จแล้ว' ให้รีโหลดและจัดเรียงทันที
+      // และยังคงส่งอัปเดตไป Supabase โดยไม่ใช้ setTimeout
+      const { data: jobsData, error: jobsError } = await supabase.from('jobs')
+        .select('*')
+        .order('created_at', { ascending: true }); 
+      if (!jobsError) {
+        setJobs(sortJobs(jobsData) || []);
+        console.log('Jobs state updated for non-"เสร็จแล้ว" status with sorted data (full reload).');
+      } else {
+        alert('เกิดข้อผิดพลาดในการโหลดงานใหม่หลังจากเปลี่ยนสถานะ: ' + jobsError.message);
+        console.error('Error fetching jobs after status update:', jobsError);
+      }
     }
   };
 
@@ -496,6 +539,53 @@ function App() {
     }
   };
 
+  const handleExport = async () => {
+    // กรองเฉพาะงานที่สถานะ "เสร็จแล้ว"
+    const completedJobs = jobs.filter(job => job.status === 'เสร็จแล้ว');
+    if (completedJobs.length === 0) {
+      alert('ไม่มีงานที่เสร็จแล้วสำหรับการส่งออก');
+      return;
+    }
+    // เตรียมข้อมูลสำหรับ Excel
+    const headers = [
+      "ลำดับ", "เนื้อหางาน", "ผู้รับผิดชอบ", "วันที่ได้รับงาน", "วันที่คาดการ", "วันที่เสร็จ", "หมายเหตุ", "สถานะ", "วันที่สร้าง", "วันที่อัปเดต"
+    ];
+    const data = completedJobs.map((job, index) => [
+      index + 1,
+      job.title || '',
+      job.assigned_to || '',
+      formatDateToYYMMDD(job.assigned_date) || '',
+      formatDateToYYMMDD(job.due_date) || '',
+      job.completed_date ? formatDateToYYMMDD(job.completed_date) : '-',
+      job.remark || '',
+      job.status || '',
+      formatDateTimeForCSV(job.created_at),
+      formatDateTimeForCSV(job.updated_at)
+    ]);
+    // สร้าง worksheet และ workbook
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'CompletedJobs');
+    // สร้างไฟล์ Excel และดาวน์โหลด
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    saveAs(new Blob([wbout], { type: 'application/octet-stream' }), 'CompletedJobs.xlsx');
+
+    // Popup ถามว่าต้องการลบงานที่เสร็จแล้วหรือไม่
+    if (window.confirm('ต้องการลบงานที่เสร็จแล้วหรือไม่?')) {
+      // ลบงานที่เสร็จแล้วทั้งหมด
+      const completedIds = completedJobs.map(job => job.id);
+      if (completedIds.length > 0) {
+        const { error } = await supabase.from('jobs').delete().in('id', completedIds);
+        if (!error) {
+          // อัปเดต state jobs ในหน้าเว็บ
+          setJobs(jobs.filter(job => job.status !== 'เสร็จแล้ว'));
+        } else {
+          alert('เกิดข้อผิดพลาดในการลบงานที่เสร็จแล้ว: ' + error.message);
+        }
+      }
+    }
+  };
+
   return (
     <div className="App">
       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 10 }}>
@@ -529,12 +619,13 @@ function App() {
         />
         <input
           type="date"
-          placeholder="Due Date"
           value={newDueDate}
           onChange={(e) => setNewDueDate(e.target.value)}
+          placeholder="วันที่ครบกำหนด"
           disabled={!user}
         />
         <button onClick={handleAddJob} disabled={!user}>เพิ่มหัวข้อ</button>
+        <button onClick={handleExport} className="export-button">Export</button>
       </div>
 
       {loading && <p>Loading jobs...</p>}
@@ -568,7 +659,11 @@ function App() {
           <tbody>
             {jobs.map((job, index) => {
               return (
-                <tr key={job.id} className={job.id === animatingJobId && job.status === 'เสร็จแล้ว' ? 'job-completed-fade-out' : ''}>
+                <tr
+                  key={job.id}
+                  className={job.id === animatingJobId && job.status === 'เสร็จแล้ว' ? 'job-completed-fade-out' : ''}
+                  ref={el => (jobRefs.current[job.id] = el)}
+                >
                   <td>{index + 1}</td>
                   <td dangerouslySetInnerHTML={{ __html: job.title.replace(/\n/g, '<br/>') }} />
                   <td>{job.assigned_to || '-'}</td>

@@ -1,23 +1,21 @@
 {
-  "name": "program2",
+  "name": "program2_new-backend",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "Backend for Coilmaster Electronics Weekly Job Dashboard",
+  "main": "server.js",
   "scripts": {
-    "start": "concurrently \"node server.js\" \"npm start --prefix frontend\"",
-    "start:backend": "node server.js",
-    "start:frontend": "npm start --prefix frontend",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js",
+    "dev": "nodemon server.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
   "dependencies": {
     "cors": "^2.8.5",
-    "express": "^5.1.0",
-    "pg": "^8.16.2"
+    "express": "^4.19.2",
+    "js-file-download": "^0.4.12"
   },
   "devDependencies": {
-    "concurrently": "^9.2.0"
+    "nodemon": "^3.1.4"
   }
 }

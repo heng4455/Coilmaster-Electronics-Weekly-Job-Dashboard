@@ -44,6 +44,22 @@ h1 {
   background: #1565c0;
 }
 
+.add-job .export-button {
+  background: #4CAF50; /* Green color */
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 18px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s;
+  margin-left: 10px; /* ย้ายจาก inline style */
+}
+
+.add-job .export-button:hover {
+  background: #45a049;
+}
+
 table {
   width: 100%;
   border-collapse: separate;
