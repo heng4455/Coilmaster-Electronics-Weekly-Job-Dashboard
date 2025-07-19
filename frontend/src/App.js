@@ -5,8 +5,10 @@ import { supabase } from './supabaseClient';
 import fileDownload from 'js-file-download';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
-
+import { motion } from 'framer-motion';
 // import { TransitionGroup } from 'react-transition-group'; // ลบบรรทัดนี้ออก หรือคอมเมนต์ไว้
+
+// import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'; // ลบบรรทัดนี้ออก
 
 function App() {
   const [jobs, setJobs] = useState([]);
@@ -22,6 +24,10 @@ function App() {
   const [errorMsg, setErrorMsg] = useState('');
   const [editingRemarkId, setEditingRemarkId] = useState(null);
   const [animatingJobId, setAnimatingJobId] = useState(null); // State สำหรับควบคุม Animation
+  const [editingDueDateId, setEditingDueDateId] = useState(null);
+  const [newDueDateValue, setNewDueDateValue] = useState('');
+  const [oldDueDates, setOldDueDates] = useState({}); // { jobId: oldDueDate }
+  const [draggingOverIndex, setDraggingOverIndex] = useState(null);
 
 
   const jobRefs = useRef({}); // สร้าง ref สำหรับเก็บ DOM element ของแต่ละงาน
@@ -103,10 +109,11 @@ function App() {
         console.log('Attempting to fetch jobs...');
         const { data: jobsData, error: jobsError } = await supabase.from('jobs')
           .select('*')
-          .order('created_at', { ascending: true }); // ดึงมาตาม created_at ก่อน แล้วค่อยมาเรียง client-side
+          .order('order', { ascending: true })
+          .order('due_date', { ascending: true });
         console.log('Jobs fetch result:', { data: jobsData, error: jobsError });
         if (jobsError) throw jobsError;
-        setJobs(sortJobs(jobsData) || []); // ใช้ sortJobs ตรงนี้
+        setJobs(sortJobs(jobsData || [])); // ใช้ sortJobs ตรงนี้
         console.log('jobsRes (inside then):', { data: jobsData, error: jobsError });
 
         // Debugging: Log type of job IDs
@@ -275,6 +282,129 @@ function App() {
     return '-';
   };
 
+  // ฟังก์ชันสำหรับแสดงและแก้ไขหมายเหตุ
+  const renderRemarkCell = (job, gapStyle) => {
+    if (editingRemarkId === job.id) {
+      return (
+        <textarea
+          rows="3"
+          value={newRemark}
+          onChange={(e) => setNewRemark(e.target.value)}
+          onBlur={() => handleSaveRemark(job.id, newRemark)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && e.ctrlKey) {
+              handleSaveRemark(job.id, newRemark);
+            } else if (e.key === 'Escape') {
+              setEditingRemarkId(null);
+              setNewRemark('');
+            }
+          }}
+          autoFocus
+          style={{ width: '100%', minHeight: '60px', boxSizing: 'border-box' }}
+          placeholder="พิมพ์หมายเหตุที่นี่..."
+        />
+      );
+    }
+
+    return (
+      <span
+        onClick={() => handleEditRemark(job.id, job.remark)}
+        dangerouslySetInnerHTML={{ __html: (job.remark || 'Add').replace(/\n/g, '<br/>') }}
+        title="คลิกเพื่อแก้ไขหมายเหตุ"
+        style={{ 
+          cursor: 'pointer',
+          display: 'block',
+          padding: '4px',
+          borderRadius: '4px',
+          transition: 'background-color 0.2s'
+        }}
+        onMouseEnter={(e) => {
+          e.target.style.backgroundColor = '#f0f8ff';
+        }}
+        onMouseLeave={(e) => {
+          e.target.style.backgroundColor = 'transparent';
+        }}
+      />
+    );
+  };
+
+  // ฟังก์ชันสำหรับแสดงและแก้ไขวันที่คาดการณ์
+  const renderDueDateCell = (job, gapStyle) => {
+    if (editingDueDateId === job.id) {
+      return (
+        <input
+          type="date"
+          value={newDueDateValue}
+          onChange={e => setNewDueDateValue(e.target.value)}
+          onBlur={() => {
+            if (newDueDateValue && newDueDateValue !== job.due_date) {
+              handleSaveDueDate(job.id, newDueDateValue);
+            } else {
+              setEditingDueDateId(null);
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              if (newDueDateValue && newDueDateValue !== job.due_date) {
+                handleSaveDueDate(job.id, newDueDateValue);
+              } else {
+                setEditingDueDateId(null);
+              }
+            } else if (e.key === 'Escape') {
+              setEditingDueDateId(null);
+              setNewDueDateValue('');
+            }
+          }}
+          autoFocus
+          className="due-date-editable"
+          disabled={job.status === 'เสร็จแล้ว'}
+        />
+      );
+    }
+
+    return (
+      <div 
+        className={`due-date-editable ${job.status !== 'เสร็จแล้ว' ? 'editable' : ''}`}
+        style={{ 
+          display: 'flex', 
+          flexDirection: 'column', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          width: '100%',
+          cursor: job.status !== 'เสร็จแล้ว' ? 'pointer' : 'default',
+          padding: '4px',
+          borderRadius: '4px',
+          transition: 'background-color 0.2s'
+        }}
+        onClick={() => {
+          if (job.status !== 'เสร็จแล้ว') {
+            setEditingDueDateId(job.id);
+            setNewDueDateValue(job.due_date || '');
+          }
+        }}
+        title={job.status !== 'เสร็จแล้ว' ? 'คลิกเพื่อแก้ไขวันที่' : ''}
+      >
+        {oldDueDates[job.id] && oldDueDates[job.id] !== job.due_date && (
+          <span style={{
+            textDecoration: 'line-through',
+            color: '#aaa',
+            fontSize: '0.85em',
+            opacity: 0.7,
+            marginBottom: 2
+          }}>
+            {formatDateToYYMMDD(oldDueDates[job.id])}
+          </span>
+        )}
+        <div className="date-content">
+          <span>{formatDateToYYMMDD(job.due_date)}</span>
+          {job.status !== 'เสร็จแล้ว' && (
+            <span className="edit-icon">✎</span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const formatDateToYYMMDD = (dateString) => {
     if (!dateString) return '-';
     const [year, month, day] = dateString.split('-');
@@ -296,47 +426,50 @@ function App() {
     return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
   };
 
-  // ฟังก์ชันจัดเรียงงานตามความสำคัญ
+  // ฟังก์ชันจัดเรียงงาน: 1) ยังไม่เสร็จ+มี due_date (วันใกล้สุดก่อน), 2) ยังไม่เสร็จ+ไม่มี due_date, 3) เสร็จแล้ว (ล่างสุด)
   const sortJobs = (jobsArray) => {
-    return [...jobsArray].sort((a, b) => {
+    console.log('sortJobs called with:', jobsArray.length, 'jobs');
+    const sorted = [...jobsArray].sort((a, b) => {
       const isACompleted = a.status === 'เสร็จแล้ว';
       const isBCompleted = b.status === 'เสร็จแล้ว';
-
-      // 1. งานที่ยังไม่เสร็จสิ้น จะอยู่ก่อนงานที่เสร็จสิ้นแล้ว
+      
+      // งานที่เสร็จแล้วให้อยู่ล่างสุด
       if (isACompleted && !isBCompleted) return 1;
       if (!isACompleted && isBCompleted) return -1;
-
-      // ถ้าสถานะเหมือนกัน (ทั้งคู่เสร็จแล้ว หรือทั้งคู่ยังไม่เสร็จ)
-      if (!isACompleted && !isBCompleted) { // ทั้งคู่ยังไม่เสร็จ
-        // เรียงตาม due_date (น้อยไปมาก, null อยู่ท้าย)
-        const dateA = a.due_date ? new Date(a.due_date) : new Date('9999-12-31'); // กำหนดวันที่ไกลมากสำหรับ null
-        const dateB = b.due_date ? new Date(b.due_date) : new Date('9999-12-31');
-
-        if (dateA < dateB) return -1;
-        if (dateA > dateB) return 1;
-
-        // ถ้า due_date เท่ากัน หรือทั้งคู่ไม่มี ให้เรียงตาม assigned_date (น้อยไปมาก)
-        const assignedAtA = new Date(a.assigned_date);
-        const assignedAtB = new Date(b.assigned_date);
-        if (assignedAtA < assignedAtB) return -1;
-        if (assignedAtA > assignedAtB) return 1;
-
-      } else if (isACompleted && isBCompleted) { // ทั้งคู่เสร็จแล้ว
-        // เรียงตาม completed_date (มากไปน้อย - ล่าสุดก่อน, null อยู่ท้าย)
-        const completedAtA = a.completed_date ? new Date(a.completed_date) : new Date('0000-01-01'); // กำหนดวันที่อดีตมากสำหรับ null
-        const completedAtB = b.completed_date ? new Date(b.completed_date) : new Date('0000-01-01');
-
-        if (completedAtA > completedAtB) return -1;
-        if (completedAtA < completedAtB) return 1;
-
-        // ถ้า completed_date เท่ากัน หรือทั้งคู่ไม่มี ให้เรียงตาม assigned_date (น้อยไปมาก)
-        const assignedAtA = new Date(a.assigned_date);
-        const assignedAtB = new Date(b.assigned_date);
-        if (assignedAtA < assignedAtB) return -1;
-        if (assignedAtA > assignedAtB) return 1;
+      
+      // ทั้งคู่ยังไม่เสร็จ
+      if (!isACompleted && !isBCompleted) {
+        const hasDueA = !!a.due_date;
+        const hasDueB = !!b.due_date;
+        
+        // กลุ่ม 1: ทั้งคู่มี due_date → เรียงวันใกล้สุดไปไกลสุด
+        if (hasDueA && hasDueB) {
+          const dateA = new Date(a.due_date);
+          const dateB = new Date(b.due_date);
+          if (dateA < dateB) return -1;
+          if (dateA > dateB) return 1;
+        }
+        
+        // กลุ่ม 1 กับ 2: มี due_date อยู่บน, ไม่มี due_date อยู่ล่าง
+        if (hasDueA && !hasDueB) return -1;
+        if (!hasDueA && hasDueB) return 1;
+        
+        // กลุ่ม 2: ทั้งคู่ไม่มี due_date → เรียงตามวันที่สร้าง (ใหม่สุดอยู่บน)
+        return new Date(b.created_at) - new Date(a.created_at);
       }
+      
+      // ทั้งคู่เสร็จแล้ว → เรียงตามวันที่เสร็จ (ใหม่สุดอยู่ล่าง)
+      if (isACompleted && isBCompleted) {
+        const dateA = a.completed_date ? new Date(a.completed_date) : new Date(a.updated_at);
+        const dateB = b.completed_date ? new Date(b.completed_date) : new Date(b.updated_at);
+        return dateB - dateA; // ใหม่สุดอยู่ล่าง
+      }
+      
       return 0;
     });
+    
+    console.log('Sorted jobs - Completed at bottom:', sorted.filter(j => j.status === 'เสร็จแล้ว').length);
+    return sorted;
   };
 
   // ฟังก์ชันลบงาน
@@ -350,9 +483,10 @@ function App() {
     if (!error) {
       const { data: jobsData, error: jobsError } = await supabase.from('jobs')
         .select('*')
-        .order('created_at', { ascending: true }); // ดึงมาตาม created_at ก่อน แล้วค่อยมาเรียง client-side
+        .order('order', { ascending: true })
+        .order('due_date', { ascending: true });
       if (!jobsError) {
-        setJobs(sortJobs(jobsData) || []); // ใช้ sortJobs ตรงนี้
+        setJobs(sortJobs(jobsData || []));
       } else {
         alert('เกิดข้อผิดพลาดในการโหลดงานใหม่: ' + jobsError.message);
         console.error('Reload jobs error:', jobsError);
@@ -385,25 +519,22 @@ function App() {
         })
         .select();
 
-      if (!error) {
-        console.log('Job added successfully:', data);
-        // ดึงงานทั้งหมดมาใหม่พร้อมจัดเรียงด้วย sortJobs
-        const { data: jobsData, error: jobsError } = await supabase.from('jobs')
-          .select('*')
-          .order('created_at', { ascending: true }); // ดึงมาตาม created_at ก่อน แล้วค่อยมาเรียง client-side
-        if (!jobsError) {
-          setJobs(sortJobs(jobsData) || []); // ใช้ sortJobs ตรงนี้
-        } else {
-          alert('เกิดข้อผิดพลาดในการโหลดงานใหม่: ' + jobsError.message);
-        }
+      // ดึง jobs ทั้งหมดมาใหม่ (ไม่ใช้ jobs เดิมใน state)
+      const { data: jobsData, error: jobsError } = await supabase.from('jobs')
+        .select('*')
+        .order('order', { ascending: true })
+        .order('due_date', { ascending: true });
+      if (!error && !jobsError) {
+        setJobs(sortJobs(jobsData || []));
+        localStorage.removeItem('jobsOrder'); // ลบ jobsOrder เดิมเพื่อไม่ให้ override ลำดับใหม่
         setNewJob('');
         setNewAssignedTo('');
-        setNewDueDate(''); // เคลียร์ค่าวันที่คาดว่าจะเสร็จ
+        setNewDueDate('');
       } else {
-        alert('เกิดข้อผิดพลาดในการเพิ่มงาน: ' + error.message);
-        console.error('Error adding job:', error);
+        alert('เกิดข้อผิดพลาดในการเพิ่มงาน: ' + (error?.message || jobsError?.message));
+        console.error('Error adding job:', error, jobsError);
       }
-      setLoading(false); // ปิด loading หลังจากเสร็จสิ้น
+      setLoading(false);
     }
   };
 
@@ -431,53 +562,20 @@ function App() {
 
     if (newStatus === 'เสร็จแล้ว') {
       // อัปเดตสถานะใน local state ก่อนเพื่อเริ่ม Animation
-      setJobs(jobs.map(j => j.id === jobId ? { ...j, status: newStatus, completed_date: completedDate } : j));
+      const updatedJobs = jobs.map(j => j.id === jobId ? { ...j, status: newStatus, completed_date: completedDate } : j);
+      setJobs(sortJobs(updatedJobs)); // จัดเรียงทันทีให้งานที่เสร็จแล้วเด้งไปล่าง
       setAnimatingJobId(jobId); // เริ่ม Animation fade-out
       
-      // ส่งการอัปเดตไปยัง Supabase (ไม่ต้องรอผล) 
-      // ไม่ต้อง await ตรงนี้ เพื่อไม่ให้ block UI และให้ Animation ทำงานก่อน
-      setTimeout(async () => {
-        if (updatedJob && updatedJob.length > 0) {
-          // ใช้ข้อมูลที่อัปเดตแล้วจาก Supabase โดยตรง ไม่ต้อง re-fetch ทั้งหมด
-          const newJobsState = jobs.map(j => j.id === updatedJob[0].id ? updatedJob[0] : j);
-          setJobs(sortJobs(newJobsState) || []); // ใช้ sortJobs ตรงนี้
-          console.log('Jobs state updated for "เสร็จแล้ว" status with updated job data.');
-
-          // เลื่อนไปยัง job ที่เสร็จแล้วหลังจากโหลดและจัดเรียงใหม่
-          if (jobRefs.current[jobId]) {
-            jobRefs.current[jobId].scrollIntoView({
-              behavior: 'smooth',
-              block: 'end'
-            });
-          }
-        } else {
-          // Fallback: If updatedJob is null/empty (shouldn't happen with .select()), re-fetch
-          console.warn('Updated job data was null or empty after .select(). Re-fetching all jobs.');
-          const { data: jobsData, error: jobsError } = await supabase.from('jobs')
-            .select('*')
-            .order('created_at', { ascending: true });
-          if (!jobsError) {
-            setJobs(sortJobs(jobsData) || []);
-            console.log('Jobs state updated for "เสร็จแล้ว" status with sorted data (full reload).');
-            if (jobRefs.current[jobId]) {
-              jobRefs.current[jobId].scrollIntoView({
-                behavior: 'smooth',
-                block: 'end'
-              });
-            }
-          } else {
-            alert('เกิดข้อผิดพลาดในการโหลดงานใหม่หลังจากเปลี่ยนสถานะ (หลัง Animation): ' + jobsError.message);
-            console.error('Error fetching jobs after status update (post-animation):', jobsError);
-          }
-        }
+      // ลบการสไลด์หน้าจอออก
+      setTimeout(() => {
         setAnimatingJobId(null); // ลบ animatingJobId ออกเมื่อ Animation เสร็จสิ้น
-      }, 500); // หน่วงเวลา 500ms ให้ตรงกับ CSS transition
+      }, 300); // ลดเวลาเป็น 300ms เพื่อให้เร็วขึ้น
     } else {
       // หากเปลี่ยนสถานะอื่นที่ไม่ใช่ 'เสร็จแล้ว' ให้รีโหลดและจัดเรียงทันที
-      // และยังคงส่งอัปเดตไป Supabase โดยไม่ใช้ setTimeout
       const { data: jobsData, error: jobsError } = await supabase.from('jobs')
         .select('*')
-        .order('created_at', { ascending: true }); 
+        .order('order', { ascending: true })
+        .order('due_date', { ascending: true }); 
       if (!jobsError) {
         setJobs(sortJobs(jobsData) || []);
         console.log('Jobs state updated for non-"เสร็จแล้ว" status with sorted data (full reload).');
@@ -485,6 +583,28 @@ function App() {
         alert('เกิดข้อผิดพลาดในการโหลดงานใหม่หลังจากเปลี่ยนสถานะ: ' + jobsError.message);
         console.error('Error fetching jobs after status update:', jobsError);
       }
+    }
+  };
+
+  // ฟังก์ชันบันทึก due_date ใหม่
+  const handleSaveDueDate = async (jobId, newDate) => {
+    if (!user) return;
+    setLoading(true);
+    const { data: updatedJob, error } = await supabase
+      .from('jobs')
+      .update({ due_date: newDate })
+      .eq('id', jobId)
+      .select();
+    setLoading(false);
+    if (!error && updatedJob && updatedJob[0]) {
+      setOldDueDates(prev => ({ ...prev, [jobId]: jobs.find(j => j.id === jobId)?.due_date }));
+      // อัปเดต jobs ใน state และจัดเรียงใหม่
+      const updatedJobs = jobs.map(j => j.id === jobId ? { ...j, due_date: newDate } : j);
+      setJobs(sortJobs(updatedJobs));
+      setEditingDueDateId(null);
+      setNewDueDateValue('');
+    } else {
+      alert('เกิดข้อผิดพลาดในการอัปเดตวันที่คาดการ');
     }
   };
 
@@ -503,16 +623,25 @@ function App() {
   };
 
   const handleEditRemark = (jobId, currentRemark) => {
+    // ไม่ต้องตรวจสอบ user แล้ว ให้แก้ไขได้เลย
     setEditingRemarkId(jobId);
     setNewRemark(currentRemark || ''); // กำหนดค่า input ด้วยข้อความเดิม
   };
 
   const handleSaveRemark = async (jobId, newRemarkContent) => {
+    setLoading(true);
+    
+    // ถ้าไม่ล็อกอิน ให้อัปเดตเฉพาะใน local state
     if (!user) {
-      alert('กรุณาเข้าสู่ระบบก่อนบันทึก Remark');
+      const updatedJobs = jobs.map(j => j.id === jobId ? { ...j, remark: newRemarkContent } : j);
+      setJobs(updatedJobs);
+      setEditingRemarkId(null);
+      setNewRemark('');
+      setLoading(false);
       return;
     }
-    setLoading(true);
+    
+    // ถ้าล็อกอินแล้ว ให้บันทึกลง Supabase
     const { data: updatedJob, error } = await supabase
       .from('jobs')
       .update({ remark: newRemarkContent })
@@ -524,9 +653,10 @@ function App() {
       // หลังจากบันทึก Remark สำเร็จ ให้ดึงงานทั้งหมดมาใหม่แล้วจัดเรียง
       const { data: jobsData, error: jobsError } = await supabase.from('jobs')
         .select('*')
-        .order('created_at', { ascending: true }); // ดึงมาตาม created_at ก่อน แล้วค่อยมาเรียง client-side
+        .order('order', { ascending: true })
+        .order('due_date', { ascending: true }); // ดึงมาตาม created_at ก่อน แล้วค่อยมาเรียง client-side
       if (!jobsError) {
-        setJobs(sortJobs(jobsData) || []); // ใช้ sortJobs ตรงนี้
+        setJobs(sortJobs(jobsData || [])); // ใช้ sortJobs ตรงนี้
       } else {
         alert('เกิดข้อผิดพลาดในการโหลดงานใหม่หลังจากบันทึก Remark: ' + jobsError.message);
         console.error('Error fetching jobs after remark update:', jobsError);
@@ -578,13 +708,57 @@ function App() {
         const { error } = await supabase.from('jobs').delete().in('id', completedIds);
         if (!error) {
           // อัปเดต state jobs ในหน้าเว็บ
-          setJobs(jobs.filter(job => job.status !== 'เสร็จแล้ว'));
+          const remainingJobs = jobs.filter(job => job.status !== 'เสร็จแล้ว');
+          setJobs(sortJobs(remainingJobs));
         } else {
           alert('เกิดข้อผิดพลาดในการลบงานที่เสร็จแล้ว: ' + error.message);
         }
       }
     }
   };
+
+  // เพิ่มฟังก์ชัน handleDragEnd (บันทึกลำดับใหม่ลง localStorage)
+  const handleDragEnd = async (result) => {
+    if (!result.destination) return;
+    const reordered = Array.from(jobs);
+    const [removed] = reordered.splice(result.source.index, 1);
+    reordered.splice(result.destination.index, 0, removed);
+    // อัปเดต order ใน state ทันที
+    setJobs(sortJobs(reordered));
+    // อัปเดต order ใน Supabase
+    await Promise.all(
+      reordered.map((job, idx) =>
+        supabase.from('jobs').update({ order: idx }).eq('id', job.id)
+      )
+    );
+    // save order to localStorage (optional, fallback)
+    localStorage.setItem('jobsOrder', JSON.stringify(reordered.map(j => j.id)));
+  };
+
+  // useEffect โหลด jobsOrder จาก localStorage ถ้ามี
+  useEffect(() => {
+    const order = localStorage.getItem('jobsOrder');
+    if (order && jobs.length > 0) {
+      // ถ้า jobsOrder ไม่ตรงกับ jobs ปัจจุบัน (จำนวนหรือ id ไม่ตรง) ให้ข้าม ไม่ต้อง override
+      const idOrder = JSON.parse(order);
+      const jobsIds = jobs.map(j => j.id);
+      const isSame = idOrder.length === jobsIds.length && idOrder.every(id => jobsIds.includes(id));
+      if (!isSame) return;
+      // เรียง jobs ตาม idOrder, jobs ที่ไม่มีใน order จะต่อท้าย
+      const jobsMap = Object.fromEntries(jobs.map(j => [j.id, j]));
+      const ordered = idOrder.map(id => jobsMap[id]).filter(Boolean);
+      const rest = jobs.filter(j => !idOrder.includes(j.id));
+      setJobs(sortJobs([...ordered, ...rest]));
+    }
+    // eslint-disable-next-line
+  }, [jobs.length]);
+
+  // หลังจากเพิ่ม/ลบ/เปลี่ยน jobs ให้บันทึกลำดับใหม่ลง localStorage
+  useEffect(() => {
+    if (jobs.length > 0) {
+      localStorage.setItem('jobsOrder', JSON.stringify(jobs.map(j => j.id)));
+    }
+  }, [jobs]);
 
   return (
     <div className="App">
@@ -631,17 +805,17 @@ function App() {
       {loading && <p>Loading jobs...</p>}
 
       <div style={{ overflowX: 'auto' }}>
-        <table className="job-table">
+        <table className="job-table job-table-animated">
           <colgroup>
             <col style={{ width: '5%' }} />{/* ลำดับ */}
-            <col style={{ width: '23%' }} />{/* เนื้อหางาน - ปรับลด */}
+            <col style={{ width: '22%' }} />{/* เนื้อหางาน - ปรับลด */}
             <col style={{ width: '10%' }} />{/* ผู้รับผิดชอบ */}
             <col style={{ width: '10%' }} />{/* วันที่ได้รับงาน */}
-            <col style={{ width: '10%' }} />{/* วันที่คาดการ */}
+            <col style={{ width: '12%' }} />{/* วันที่คาดการ - เพิ่มความกว้าง */}
             <col style={{ width: '10%' }} />{/* วันที่เสร็จ */}
             <col style={{ width: '15%' }} />{/* หมายเหตุ */}
-            <col style={{ width: '10%' }} />{/* สถานะ - ปรับเพิ่ม */}
-            <col style={{ width: '9%' }} />{/* ดำเนินการ - ปรับเพิ่ม */}
+            <col style={{ width: '10%' }} />{/* สถานะ */}
+            <col style={{ width: '8%' }} />{/* ดำเนินการ - ปรับลด */}
           </colgroup>
           <thead>
             <tr>
@@ -656,68 +830,126 @@ function App() {
               <th>ดำเนินการ</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody
+            style={{
+              background: draggingOverIndex !== null ? '#e3f2fd' : undefined,
+              transition: 'background 0.2s',
+              position: 'relative'
+            }}
+          >
             {jobs.map((job, index) => {
+              // หาตำแหน่ง drop gap
+              let gapStyle = {};
+              if (draggingOverIndex !== null && draggingOverIndex === index) {
+                gapStyle = { paddingTop: 24, transition: 'padding 0.2s' };
+              }
               return (
-                <tr
-                  key={job.id}
-                  className={job.id === animatingJobId && job.status === 'เสร็จแล้ว' ? 'job-completed-fade-out' : ''}
-                  ref={el => (jobRefs.current[job.id] = el)}
-                >
-                  <td>{index + 1}</td>
-                  <td dangerouslySetInnerHTML={{ __html: job.title.replace(/\n/g, '<br/>') }} />
-                  <td>{job.assigned_to || '-'}</td>
-                  <td>{formatDateToYYMMDD(job.assigned_date)}</td>
-                  <td>{formatDateToYYMMDD(job.due_date)}</td>
-                  <td>{formatDateToYYMMDD(job.completed_date)}</td>
-                  <td style={{ color: job.remark ? '#333' : '#aaa' }}>
-                    {editingRemarkId === job.id ? (
-                      <textarea
-                        rows="3"
-                        value={newRemark}
-                        onChange={(e) => setNewRemark(e.target.value)}
-                        onBlur={() => handleSaveRemark(job.id, newRemark)}
-                        autoFocus
-                        style={{ width: '100%', minHeight: '60px', boxSizing: 'border-box' }}
-                      />
-                    ) : (
-                      <span
-                        onClick={() => handleEditRemark(job.id, job.remark)}
-                        dangerouslySetInnerHTML={{ __html: (job.remark || 'Add').replace(/\n/g, '<br/>') }}
-                      />
-                    )}
-                  </td>
-                  <td>
-                    <select
-                      value={job.status}
-                      onChange={(e) => {
-                        const newStatus = e.target.value;
-                        const newCompletedDate = newStatus === 'เสร็จแล้ว' ? new Date().toISOString().split('T')[0] : null;
-                        handleStatusChange(job.id, newStatus, newCompletedDate);
-                      }}
-                      disabled={!user}
-                      className={!user ? 'disabled-select' : ''}
+                <React.Fragment key={job.id}>
+                  {/* ลบตัวแปร isDropGap และการใช้งานออก (ไม่มีในโค้ดนี้แล้ว) */}
+                  {job.due_date ? (
+                    <motion.tr
+                      key={job.id}
+                      ref={el => (jobRefs.current[job.id] = el)}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.4, type: 'spring', stiffness: 60 }}
+                      className={`job-row ${job.status === 'เสร็จแล้ว' ? 'completed' : ''} ${job.id === animatingJobId && job.status === 'เสร็จแล้ว' ? 'job-completed-fade-out newly-completed' : ''}`}
+                      style={gapStyle}
                     >
-                      <option value="ดำเนินการอยู่">ดำเนินการ</option>
-                      <option value="รออนุมัติ">รออนุมัติ</option>
-                      <option value="เลื่อน">เลื่อน</option>
-                      <option value="เสร็จแล้ว">เสร็จแล้ว</option>
-                    </select>
-                  </td>
-                  <td>
-                    {job.status === 'เสร็จแล้ว' ? (
-                      <button className="button-delete" onClick={() => handleDeleteJob(job.id)}>
-                        ลบ
-                      </button>
-                    ) : (
-                      <button className="button-on-process" disabled={true}>
-                        On process
-                      </button>
-                    )}
-                  </td>
-                </tr>
+                      <td style={gapStyle}>{index + 1}</td>
+                      <td style={gapStyle} dangerouslySetInnerHTML={{ __html: job.title.replace(/\n/g, '<br/>') }} />
+                      <td style={gapStyle}>{job.assigned_to || '-'}</td>
+                      <td style={gapStyle}>{formatDateToYYMMDD(job.assigned_date)}</td>
+                      <td style={gapStyle}>
+                        {renderDueDateCell(job, gapStyle)}
+                      </td>
+                      <td style={gapStyle}>{formatDateToYYMMDD(job.completed_date)}</td>
+                      <td style={{ ...gapStyle, color: job.remark ? '#333' : '#aaa' }}>
+                        {renderRemarkCell(job, gapStyle)}
+                      </td>
+                      <td style={gapStyle}>
+                        <select
+                          value={job.status}
+                          onChange={(e) => {
+                            const newStatus = e.target.value;
+                            const newCompletedDate = newStatus === 'เสร็จแล้ว' ? new Date().toISOString().split('T')[0] : null;
+                            handleStatusChange(job.id, newStatus, newCompletedDate);
+                          }}
+                          disabled={!user}
+                          className={!user ? 'disabled-select' : ''}
+                        >
+                          <option value="ดำเนินการอยู่">ดำเนินการ</option>
+                          <option value="รออนุมัติ">รออนุมัติ</option>
+                          <option value="เลื่อน">เลื่อน</option>
+                          <option value="เสร็จแล้ว">เสร็จแล้ว</option>
+                        </select>
+                      </td>
+                      <td style={gapStyle}>
+                        {job.status === 'เสร็จแล้ว' ? (
+                          <button className="button-delete" onClick={() => handleDeleteJob(job.id)}>
+                            ลบ
+                          </button>
+                        ) : (
+                          <button className="button-on-process" disabled={true}>
+                            On process
+                          </button>
+                        )}
+                      </td>
+                    </motion.tr>
+                  ) : (
+                    <tr key={job.id} className={`job-row ${job.status === 'เสร็จแล้ว' ? 'completed' : ''}`} style={gapStyle}>
+                      <td style={gapStyle}>{index + 1}</td>
+                      <td style={gapStyle} dangerouslySetInnerHTML={{ __html: job.title.replace(/\n/g, '<br/>') }} />
+                      <td style={gapStyle}>{job.assigned_to || '-'}</td>
+                      <td style={gapStyle}>{formatDateToYYMMDD(job.assigned_date)}</td>
+                      <td style={gapStyle}>
+                        {renderDueDateCell(job, gapStyle)}
+                      </td>
+                      <td style={gapStyle}>{formatDateToYYMMDD(job.completed_date)}</td>
+                      <td style={{ ...gapStyle, color: job.remark ? '#333' : '#aaa' }}>
+                        {renderRemarkCell(job, gapStyle)}
+                      </td>
+                      <td style={gapStyle}>
+                        <select
+                          value={job.status}
+                          onChange={(e) => {
+                            const newStatus = e.target.value;
+                            const newCompletedDate = newStatus === 'เสร็จแล้ว' ? new Date().toISOString().split('T')[0] : null;
+                            handleStatusChange(job.id, newStatus, newCompletedDate);
+                          }}
+                          disabled={!user}
+                          className={!user ? 'disabled-select' : ''}
+                        >
+                          <option value="ดำเนินการอยู่">ดำเนินการ</option>
+                          <option value="รออนุมัติ">รออนุมัติ</option>
+                          <option value="เลื่อน">เลื่อน</option>
+                          <option value="เสร็จแล้ว">เสร็จแล้ว</option>
+                        </select>
+                      </td>
+                      <td style={gapStyle}>
+                        {job.status === 'เสร็จแล้ว' ? (
+                          <button className="button-delete" onClick={() => handleDeleteJob(job.id)}>
+                            ลบ
+                          </button>
+                        ) : (
+                          <button className="button-on-process" disabled={true}>
+                            On process
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               );
             })}
+            {draggingOverIndex !== null && (
+              <tr style={{ height: 0 }}>
+                <td colSpan={10} style={{ padding: 0 }}>
+                  <div style={{ height: 4, background: '#1976d2', borderRadius: 2, margin: 0, opacity: 0.5, transition: 'opacity 0.2s' }} />
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

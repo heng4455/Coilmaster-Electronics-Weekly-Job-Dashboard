@@ -90,6 +90,60 @@ th {
 }
 td {
   color: #333;
+  transition: background-color 0.2s ease-in-out;
+}
+
+/* Individual cell hover effects */
+.job-table-animated tbody tr:hover td {
+  background-color: transparent;
+}
+
+/* Status cell hover effect */
+.job-table-animated tbody tr:hover td:nth-child(8) {
+  background-color: rgba(25, 118, 210, 0.05);
+}
+
+/* Action cell hover effect */
+.job-table-animated tbody tr:hover td:nth-child(9) {
+  background-color: rgba(25, 118, 210, 0.05);
+}
+
+/* Remark cell hover effect */
+.job-table-animated tbody tr:hover td:nth-child(7) {
+  background-color: rgba(25, 118, 210, 0.05);
+}
+
+/* Remark cell styles */
+.job-table-animated tbody td:nth-child(7) {
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.job-table-animated tbody td:nth-child(7):hover {
+  background-color: rgba(25, 118, 210, 0.1) !important;
+}
+
+/* Remark textarea styles */
+.job-table-animated tbody td:nth-child(7) textarea {
+  width: 100%;
+  min-height: 60px;
+  box-sizing: border-box;
+  border: 2px solid #1976d2;
+  border-radius: 4px;
+  padding: 4px;
+  font-size: 0.9rem;
+  resize: vertical;
+}
+
+.job-table-animated tbody td:nth-child(7) textarea:focus {
+  outline: none;
+  border-color: #1565c0;
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.2);
+}
+
+/* Due date cell hover effect */
+.job-table-animated tbody tr:hover td:nth-child(5) {
+  background-color: rgba(25, 118, 210, 0.05);
 }
 tr:first-child th:first-child {
   border-top-left-radius: 8px;
@@ -108,6 +162,21 @@ tr:nth-child(even) {
 }
 tr:nth-child(odd) {
   background: #fff;
+}
+
+/* Hover effect for table rows */
+.job-table-animated tbody tr:hover {
+  background-color: #e3f2fd !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.15);
+  transition: all 0.2s ease-in-out;
+  cursor: pointer;
+}
+
+/* Completed job hover effect */
+.job-table-animated tbody tr.completed:hover {
+  background-color: #e8f5e8 !important;
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.15);
 }
 td button {
   width: 100%; /* ทำให้ปุ่มมีความกว้างเต็มเซลล์ */
@@ -143,6 +212,18 @@ td select {
   border-radius: 5px;
   font-size: 0.95rem;
   height: auto; /* กำหนด height เป็น auto */
+  transition: all 0.2s ease-in-out;
+}
+
+/* Enhanced hover effects for interactive elements */
+.job-table-animated tbody tr:hover td select {
+  border-color: #1976d2;
+  box-shadow: 0 0 0 1px rgba(25, 118, 210, 0.2);
+}
+
+.job-table-animated tbody tr:hover td button {
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
 .pie-chart {
@@ -278,13 +359,114 @@ td select {
 }
 
 /* Animation for job row completion */
-/*
 .job-completed-fade-out {
-  opacity: 0; /* ทำให้จางหายไป */
-  /* ระยะเวลาการเปลี่ยนผ่าน */
-/*
+  opacity: 0 !important;
+  transition: opacity 0.5s;
 }
-*/
+
+/* Animation for job moving to bottom when completed */
+.job-row {
+  transition: all 0.3s ease-in-out;
+}
+
+.job-row.completed {
+  background-color: #e8f5e8 !important;
+  border-left: 4px solid #4caf50;
+}
+
+/* Smooth transition for job reordering */
+.job-table-animated tbody tr {
+  transition: all 0.3s ease-in-out;
+}
+
+/* Highlight effect for newly completed jobs */
+.job-row.newly-completed {
+  animation: highlightCompleted 0.6s ease-in-out;
+}
+
+@keyframes highlightCompleted {
+  0% {
+    background-color: #fff3e0;
+    transform: scale(1.02);
+  }
+  50% {
+    background-color: #e8f5e8;
+    transform: scale(1.01);
+  }
+  100% {
+    background-color: #e8f5e8;
+    transform: scale(1);
+  }
+}
+
+/* Editable due date cell styles */
+.due-date-editable {
+  position: relative;
+  overflow: hidden;
+  word-wrap: break-word;
+}
+
+.due-date-editable:hover {
+  background-color: #f0f8ff !important;
+}
+
+.due-date-editable input[type="date"] {
+  width: 100%;
+  border: 2px solid #1976d2;
+  border-radius: 4px;
+  padding: 4px;
+  font-size: 0.9rem;
+  background-color: #fff;
+}
+
+.due-date-editable input[type="date"]:focus {
+  outline: none;
+  border-color: #1565c0;
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.2);
+}
+
+/* Fix for date cell overflow */
+.due-date-editable .date-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.due-date-editable .edit-icon {
+  font-size: 0.8rem;
+  color: #1976d2;
+  opacity: 0.7;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
+/* Responsive table adjustments */
+@media (max-width: 768px) {
+  .due-date-editable .date-content {
+    font-size: 0.8rem;
+  }
+  
+  .due-date-editable .edit-icon {
+    font-size: 0.7rem;
+  }
+  
+  /* Reduce hover effects on mobile */
+  .job-table-animated tbody tr:hover {
+    transform: none;
+    box-shadow: 0 1px 4px rgba(25, 118, 210, 0.1);
+  }
+  
+  .job-table-animated tbody tr:hover td button {
+    transform: none;
+  }
+}
 
 /* Animations for CSSTransition (move, enter, exit) */
 /*
