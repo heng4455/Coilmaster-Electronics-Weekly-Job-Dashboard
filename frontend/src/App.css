@@ -145,6 +145,51 @@ td {
 .job-table-animated tbody tr:hover td:nth-child(5) {
   background-color: rgba(25, 118, 210, 0.05);
 }
+
+/* Due date history styles */
+.due-date-history {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-bottom: 4px;
+  max-height: 60px;
+  overflow: hidden;
+}
+
+.due-date-history-item {
+  text-decoration: line-through !important;
+  color: #666 !important;
+  font-size: 0.75em !important;
+  line-height: 1.2;
+  transition: all 0.2s ease-in-out;
+  padding: 1px 0;
+  opacity: 0.6 !important;
+  background-color: transparent !important;
+}
+
+/* เพิ่ม CSS ที่เฉพาะเจาะจงมากขึ้น */
+.due-date-editable .due-date-history .due-date-history-item {
+  text-decoration: line-through !important;
+  color: #666 !important;
+  font-size: 0.75em !important;
+  opacity: 0.6 !important;
+}
+
+.job-table-animated .due-date-history-item {
+  text-decoration: line-through !important;
+  color: #666 !important;
+  font-size: 0.75em !important;
+  opacity: 0.6 !important;
+}
+
+.due-date-history-item:hover {
+  opacity: 0.8 !important;
+  color: #888 !important;
+  background-color: rgba(0, 0, 0, 0.05);
+  border-radius: 2px;
+  padding: 1px 2px;
+  text-decoration: line-through !important;
+}
 tr:first-child th:first-child {
   border-top-left-radius: 8px;
 }
@@ -510,6 +555,19 @@ th:nth-child(7), td:nth-child(7) { width: 15%; }
 th:nth-child(8), td:nth-child(8) { width: 8%; }
 th:nth-child(9), td:nth-child(9) { width: 7%; }
 */
+
+.add-job-disabled {
+  background-color: #ccc !important;
+  color: #888 !important;
+  border: 1px solid #bbb !important;
+  cursor: not-allowed !important;
+}
+.add-job-active {
+  background-color: #1976d2;
+  color: #fff;
+  border: 1px solid #1976d2;
+  cursor: pointer;
+}
 
 @media (max-width: 768px) {
   .App {

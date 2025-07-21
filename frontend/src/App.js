@@ -26,7 +26,7 @@ function App() {
   const [animatingJobId, setAnimatingJobId] = useState(null); // State สำหรับควบคุม Animation
   const [editingDueDateId, setEditingDueDateId] = useState(null);
   const [newDueDateValue, setNewDueDateValue] = useState('');
-  const [oldDueDates, setOldDueDates] = useState({}); // { jobId: oldDueDate }
+  const [oldDueDates, setOldDueDates] = useState({}); // { jobId: [oldDueDate1, oldDueDate2, ...] }
   const [draggingOverIndex, setDraggingOverIndex] = useState(null);
 
 
@@ -49,7 +49,7 @@ function App() {
     });
     supabase.auth.onAuthStateChange(async (_event, session) => {
       setUser(session?.user || null);
-      setJobs([]);
+      // setJobs([]); // ลบบรรทัดนี้ออก
       setProfiles([]);
       setLoading(false);
       // ถ้า login สำเร็จและยังไม่มี profile ให้ insert profile
@@ -107,8 +107,9 @@ function App() {
 
         // Fetch jobs always
         console.log('Attempting to fetch jobs...');
+        // เปลี่ยนจาก .select('*') เป็น .select('*, due_date_history')
         const { data: jobsData, error: jobsError } = await supabase.from('jobs')
-          .select('*')
+          .select('*, due_date_history')
           .order('order', { ascending: true })
           .order('due_date', { ascending: true });
         console.log('Jobs fetch result:', { data: jobsData, error: jobsError });
@@ -120,6 +121,18 @@ function App() {
         if (jobsData && jobsData.length > 0) {
           console.log('First job ID and its type:', jobsData[0].id, typeof jobsData[0].id);
         }
+
+        // ใน useEffect ที่ fetch jobs (หลัง setJobs)
+        console.log('Jobs fetch result:', { data: jobsData, error: jobsError });
+        if (jobsData && jobsData.length > 0) {
+          console.log('ตัวอย่าง job:', jobsData[0]);
+        }
+        const oldDueDatesObj = {};
+        (jobsData || []).forEach(job => {
+          oldDueDatesObj[job.id] = Array.isArray(job.due_date_history) ? job.due_date_history : [];
+        });
+        console.log('oldDueDatesObj:', oldDueDatesObj);
+        setOldDueDates(oldDueDatesObj);
 
       } catch (err) {
         setErrorMsg('เกิดข้อผิดพลาดในการโหลดข้อมูล: ' + err.message);
@@ -151,16 +164,24 @@ function App() {
 
   // Auth Modal UI (state แยกใน modal)
   const AuthModal = ({ show, mode, onClose, onSwitchMode }) => {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
+    // --- เพิ่มเติม: โหลด email/password จาก localStorage ---
+    const [email, setEmail] = useState(() => localStorage.getItem('savedEmail') || '');
+    const [password, setPassword] = useState(() => localStorage.getItem('savedPassword') || '');
     const [rePassword, setRePassword] = useState('');
     const [userName, setUserName] = useState('');
     const [authError, setAuthError] = useState('');
     const [authMsg, setAuthMsg] = useState('');
 
     useEffect(() => {
-      setEmail('');
-      setPassword('');
+      // --- reset เฉพาะ signup/reset ---
+      if (mode === 'signup' || mode === 'reset') {
+        setEmail('');
+        setPassword('');
+      } else if (mode === 'login' && show) {
+        // โหลด email/password จาก localStorage เฉพาะ login
+        setEmail(localStorage.getItem('savedEmail') || '');
+        setPassword(localStorage.getItem('savedPassword') || '');
+      }
       setRePassword('');
       setUserName('');
       setAuthError('');
@@ -182,7 +203,12 @@ function App() {
       setAuthError(''); setAuthMsg('');
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) setAuthError(error.message);
-      else onClose();
+      else {
+        // --- save email/password ลง localStorage เฉพาะเครื่องนี้ ---
+        localStorage.setItem('savedEmail', email);
+        localStorage.setItem('savedPassword', password);
+        onClose();
+      }
     };
     const handleSignup = async (e) => {
       e.preventDefault();
@@ -357,7 +383,7 @@ function App() {
           }}
           autoFocus
           className="due-date-editable"
-          disabled={job.status === 'เสร็จแล้ว'}
+          disabled={job.status === 'เสร็จแล้ว' || !user}
         />
       );
     }
@@ -384,20 +410,46 @@ function App() {
         }}
         title={job.status !== 'เสร็จแล้ว' ? 'คลิกเพื่อแก้ไขวันที่' : ''}
       >
-        {oldDueDates[job.id] && oldDueDates[job.id] !== job.due_date && (
-          <span style={{
-            textDecoration: 'line-through',
-            color: '#aaa',
-            fontSize: '0.85em',
-            opacity: 0.7,
-            marginBottom: 2
-          }}>
-            {formatDateToYYMMDD(oldDueDates[job.id])}
-          </span>
+        {(() => {
+          console.log(`Checking history for job ${job.id}:`, oldDueDates[job.id]);
+          return oldDueDates[job.id] && oldDueDates[job.id].length > 0;
+        })() && (
+          <div className="due-date-history">
+            {console.log(`Rendering history for job ${job.id}:`, oldDueDates[job.id])}
+            {oldDueDates[job.id].slice(0, 3).map((oldDate, index) => (
+              <div
+                key={index}
+                className="due-date-history-item"
+                style={{
+                  textDecoration: 'line-through',
+                  opacity: 0.6 - (index * 0.1),
+                  color: '#666',
+                  fontSize: '0.8em',
+                  marginBottom: '2px'
+                }}
+                title={`วันที่เดิม: ${formatDateToYYMMDD(oldDate)}`}
+              >
+                {formatDateToYYMMDD(oldDate)}
+              </div>
+            ))}
+            {oldDueDates[job.id].length > 3 && (
+              <div 
+                className="due-date-history-item"
+                style={{ 
+                  opacity: 0.4,
+                  fontSize: '0.7em',
+                  fontStyle: 'italic'
+                }}
+                title={`และอีก ${oldDueDates[job.id].length - 3} วันที่`}
+              >
+                +{oldDueDates[job.id].length - 3} วันที่
+              </div>
+            )}
+          </div>
         )}
         <div className="date-content">
           <span>{formatDateToYYMMDD(job.due_date)}</span>
-          {job.status !== 'เสร็จแล้ว' && (
+          {job.status !== 'เสร็จแล้ว' && user && (
             <span className="edit-icon">✎</span>
           )}
         </div>
@@ -516,6 +568,7 @@ function App() {
           assigned_date: new Date().toISOString().slice(0, 10),
           status: 'ดำเนินการอยู่',
           due_date: newJobDueDate || null,
+          due_date_history: [] // เพิ่มบรรทัดนี้
         })
         .select();
 
@@ -588,23 +641,62 @@ function App() {
 
   // ฟังก์ชันบันทึก due_date ใหม่
   const handleSaveDueDate = async (jobId, newDate) => {
-    if (!user) return;
-    setLoading(true);
-    const { data: updatedJob, error } = await supabase
-      .from('jobs')
-      .update({ due_date: newDate })
-      .eq('id', jobId)
-      .select();
-    setLoading(false);
-    if (!error && updatedJob && updatedJob[0]) {
-      setOldDueDates(prev => ({ ...prev, [jobId]: jobs.find(j => j.id === jobId)?.due_date }));
-      // อัปเดต jobs ใน state และจัดเรียงใหม่
-      const updatedJobs = jobs.map(j => j.id === jobId ? { ...j, due_date: newDate } : j);
-      setJobs(sortJobs(updatedJobs));
-      setEditingDueDateId(null);
-      setNewDueDateValue('');
-    } else {
-      alert('เกิดข้อผิดพลาดในการอัปเดตวันที่คาดการ');
+    if (!user) {
+      alert('กรุณาเข้าสู่ระบบเพื่อแก้ไขวันที่คาดการณ์');
+      return;
+    }
+    console.log(`=== handleSaveDueDate called ===`);
+    console.log(`Job ID: ${jobId}`);
+    console.log(`New Date: ${newDate}`);
+    
+    const currentJob = jobs.find(j => j.id === jobId);
+    const currentDueDate = currentJob?.due_date;
+    console.log(`Current Due Date: ${currentDueDate}`);
+    
+    // เก็บประวัติการแก้ไขวันที่ (วันที่เก่าจะถูกดันขึ้นไปด้านบน)
+    let newHistory = oldDueDates[jobId] || [];
+    if (currentDueDate && currentDueDate.trim() !== '' && currentDueDate !== newDate) {
+      newHistory = [...newHistory, currentDueDate];
+    }
+    setOldDueDates(prev => {
+      const existingHistory = prev[jobId] || [];
+      if (currentDueDate && currentDueDate.trim() !== '' && currentDueDate !== newDate) {
+        return { ...prev, [jobId]: [...existingHistory, currentDueDate] };
+      }
+      return { ...prev, [jobId]: existingHistory };
+    });
+    
+    // อัปเดต jobs ใน state และจัดเรียงใหม่
+    const updatedJobs = jobs.map(j => j.id === jobId ? { ...j, due_date: newDate } : j);
+    setJobs(sortJobs(updatedJobs));
+    setEditingDueDateId(null);
+    setNewDueDateValue('');
+    
+    // ถ้าล็อกอินแล้ว ให้บันทึกลง Supabase
+    if (user) {
+      setLoading(true);
+      // เพิ่ม log ตรงนี้
+      console.log('จะอัปเดต Supabase:', {
+        jobId,
+        due_date: newDate,
+        due_date_history: newHistory
+      });
+      const { data: updatedJob, error } = await supabase
+        .from('jobs')
+        .update({ 
+          due_date: newDate,
+          due_date_history: newHistory
+        })
+        .eq('id', jobId)
+        .select();
+      // เพิ่ม log ตรงนี้
+      console.log('Supabase update result:', { data: updatedJob, error });
+      setLoading(false);
+      
+      if (error) {
+        alert('เกิดข้อผิดพลาดในการอัปเดตวันที่คาดการณ์');
+        console.error('Error updating due date:', error);
+      }
     }
   };
 
@@ -614,11 +706,12 @@ function App() {
       console.error('Logout error:', error);
       alert('เกิดข้อผิดพลาดในการออกจากระบบ: ' + error.message);
     } else {
-      setUser(null);
-      setJobs([]);
-      setProfiles([]);
-      setLoading(false);
-      console.log('Logged out successfully.');
+      window.location.reload(); // รีเฟรชหน้าเว็บทันที
+      return; // ไม่ต้อง setUser/setProfiles/setLoading ต่อ
+      // setUser(null);
+      // setProfiles([]);
+      // setLoading(false);
+      // console.log('Logged out successfully.');
     }
   };
 
@@ -753,6 +846,20 @@ function App() {
     // eslint-disable-next-line
   }, [jobs.length]);
 
+  // ล้างประวัติการแก้ไขวันที่เมื่อโหลดหน้าใหม่
+  useEffect(() => {
+    // setOldDueDates({}); // ลบบรรทัดนี้ออก
+  }, [user]);
+
+  // Debug: แสดงประวัติการแก้ไขวันที่
+  useEffect(() => {
+    console.log('Current oldDueDates:', oldDueDates);
+    console.log('oldDueDates keys:', Object.keys(oldDueDates));
+    Object.keys(oldDueDates).forEach(key => {
+      console.log(`Job ${key} history:`, oldDueDates[key]);
+    });
+  }, [oldDueDates]);
+
   // หลังจากเพิ่ม/ลบ/เปลี่ยน jobs ให้บันทึกลำดับใหม่ลง localStorage
   useEffect(() => {
     if (jobs.length > 0) {
@@ -798,11 +905,18 @@ function App() {
           placeholder="วันที่ครบกำหนด"
           disabled={!user}
         />
-        <button onClick={handleAddJob} disabled={!user}>เพิ่มหัวข้อ</button>
+        <button 
+          onClick={handleAddJob} 
+          disabled={!user}
+          className={!user ? 'add-job-disabled' : 'add-job-active'}
+        >เพิ่มหัวข้อ</button>
         <button onClick={handleExport} className="export-button">Export</button>
       </div>
 
-      {loading && <p>Loading jobs...</p>}
+      {/* Loading jobs message */}
+      {loading && jobs.length === 0 && (
+        <div style={{ color: '#888', marginBottom: 8 }}>Loading jobs...</div>
+      )}
 
       <div style={{ overflowX: 'auto' }}>
         <table className="job-table job-table-animated">
