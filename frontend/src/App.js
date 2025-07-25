@@ -44,20 +44,10 @@ function App() {
 
   const jobRefs = useRef({}); // สร้าง ref สำหรับเก็บ DOM element ของแต่ละงาน
 
-  // Handle modal body scroll prevention
+  // Handle modal without body scroll prevention for better performance
   useEffect(() => {
-    if (showLoginModal || showUserMenu) {
-      document.body.classList.add('modal-open');
-      // Scroll to top when modal opens
-      window.scrollTo(0, 0);
-    } else {
-      document.body.classList.remove('modal-open');
-    }
-    
-    // Cleanup on unmount
-    return () => {
-      document.body.classList.remove('modal-open');
-    };
+    // Remove scroll prevention for lightweight modal experience
+    // No need to lock body scroll anymore
   }, [showLoginModal, showUserMenu]);
 
   // ระบบ auth ใหม่ - เรียบง่าย
@@ -1063,13 +1053,7 @@ function App() {
       
       {/* Login/Signup Modal */}
       {showLoginModal && (
-        <div className="modal-backdrop" onClick={() => {
-          setShowLoginModal(false);
-          setIsSignupMode(false);
-          setLoginError('');
-          setSignupError('');
-          setSignupSuccess('');
-        }}>
+        <div className="modal-backdrop">
           <div className="modal" onClick={e => e.stopPropagation()}>
             <button className="modal-close" onClick={() => {
               setShowLoginModal(false);
@@ -1192,7 +1176,7 @@ function App() {
       
       {/* User Menu Modal */}
       {showUserMenu && (
-        <div className="modal-backdrop" onClick={() => setShowUserMenu(false)}>
+        <div className="modal-backdrop">
           <div className="modal" onClick={e => e.stopPropagation()} style={{ minWidth: '280px' }}>
             <button className="modal-close" onClick={() => setShowUserMenu(false)}>×</button>
             <div style={{ padding: '20px', textAlign: 'center' }}>
