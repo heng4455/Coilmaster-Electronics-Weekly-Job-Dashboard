@@ -14,145 +14,278 @@ function App() {
   const [jobs, setJobs] = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [newJob, setNewJob] = useState('');
-  const [newAssignedTo, setNewAssignedTo] = useState('');
+  const [selectedPeople, setSelectedPeople] = useState([]); // For multiple selection
   const [newDueDate, setNewDueDate] = useState('');
   const [newRemark, setNewRemark] = useState('');
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState(null);
-  const [showAuthModal, setShowAuthModal] = useState(false);
-  const [authMode, setAuthMode] = useState('login'); // login | signup | reset
+  const [operationLoading, setOperationLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [editingRemarkId, setEditingRemarkId] = useState(null);
   const [animatingJobId, setAnimatingJobId] = useState(null); // State สำหรับควบคุม Animation
   const [editingDueDateId, setEditingDueDateId] = useState(null);
   const [newDueDateValue, setNewDueDateValue] = useState('');
   const [oldDueDates, setOldDueDates] = useState({}); // { jobId: [oldDueDate1, oldDueDate2, ...] }
-  const [draggingOverIndex, setDraggingOverIndex] = useState(null);
-
+  
+  // ระบบ auth ใหม่ - เรียบง่าย
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [signupEmail, setSignupEmail] = useState('');
+  const [signupPassword, setSignupPassword] = useState('');
+  const [signupConfirmPassword, setSignupConfirmPassword] = useState('');
+  const [signupName, setSignupName] = useState('');
+  const [signupError, setSignupError] = useState('');
+  const [signupSuccess, setSignupSuccess] = useState('');
+  const [isSignupMode, setIsSignupMode] = useState(false); // สำหรับสลับโหมดใน modal เดียวกัน
+  const [showUserMenu, setShowUserMenu] = useState(false); // สำหรับแสดง user menu modal
 
   const jobRefs = useRef({}); // สร้าง ref สำหรับเก็บ DOM element ของแต่ละงาน
 
-
-  // โหลด user ปัจจุบัน
+  // Handle modal body scroll prevention
   useEffect(() => {
-    supabase.auth.getUser().then(({ data, error }) => {
-      if (error || !data.user) {
-        setUser(null);
-        // ลบ localStorage ที่เกี่ยวกับ supabase
-        Object.keys(localStorage)
-          .filter((k) => k.startsWith('sb-'))
-          .forEach((k) => localStorage.removeItem(k));
-      } else {
-        setUser(data.user);
-      }
-      setLoading(false);
-    });
-    supabase.auth.onAuthStateChange(async (_event, session) => {
-      setUser(session?.user || null);
-      // setJobs([]); // ลบบรรทัดนี้ออก
-      setProfiles([]);
-      setLoading(false);
-      // ถ้า login สำเร็จและยังไม่มี profile ให้ insert profile
-      if (session?.user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('user_id', session.user.id)
-          .single();
-        if (!profile && session.user.user_metadata?.user_name) {
-          await supabase.from('profiles').insert([
-            { user_id: session.user.id, username: session.user.user_metadata.user_name }
-          ]);
+    if (showLoginModal || showUserMenu) {
+      document.body.classList.add('modal-open');
+      // Scroll to top when modal opens
+      window.scrollTo(0, 0);
+    } else {
+      document.body.classList.remove('modal-open');
+    }
+    
+    // Cleanup on unmount
+    return () => {
+      document.body.classList.remove('modal-open');
+    };
+  }, [showLoginModal, showUserMenu]);
+
+  // ระบบ auth ใหม่ - เรียบง่าย
+  useEffect(() => {
+    let mounted = true;
+    
+    const initializeAuth = async () => {
+      try {
+        // ตรวจสอบ session ปัจจุบันก่อน
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          if (mounted) {
+            setIsLoggedIn(false);
+            setCurrentUser(null);
+            setLoading(false);
+          }
+          return;
+        }
+        
+        if (mounted) {
+          if (session?.user) {
+            setIsLoggedIn(true);
+            setCurrentUser(session.user);
+          } else {
+            setIsLoggedIn(false);
+            setCurrentUser(null);
+          }
+          setLoading(false);
+        }
+      } catch (error) {
+        if (mounted) {
+          setIsLoggedIn(false);
+          setCurrentUser(null);
+          setLoading(false);
         }
       }
-      // force reload profiles ทุกครั้งหลัง login/logout
-      const { data: newProfiles } = await supabase.from('profiles').select('*');
-      setProfiles(newProfiles || []);
-    });
+    };
+    
+    // เริ่มต้น auth
+    initializeAuth();
+    
+    // ฟัง auth state changes เพื่อตรวจสอบ session อัตโนมัติ
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (!mounted) return;
+        
+        if (event === 'SIGNED_IN' && session?.user) {
+          setIsLoggedIn(true);
+          setCurrentUser(session.user);
+          setShowLoginModal(false);
+          setIsSignupMode(false);
+        } else if (event === 'SIGNED_OUT') {
+          setIsLoggedIn(false);
+          setCurrentUser(null);
+          setProfiles([]);
+        } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+          setIsLoggedIn(true);
+          setCurrentUser(session.user);
+        } else if (event === 'INITIAL_SESSION' && session?.user) {
+          setIsLoggedIn(true);
+          setCurrentUser(session.user);
+        }
+      }
+    );
+
+    // Cleanup subscription เมื่อ component unmount
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
-  // โหลด jobs และ profiles จาก Supabase ทุกครั้งที่ user เปลี่ยน
+  // ฟังก์ชันล็อกอิน
+  const handleLogin = async (email, password) => {
+    try {
+      setLoginError('');
+      
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email,
+        password: password,
+      });
+
+      if (error) {
+        setLoginError(error.message);
+        return false;
+      }
+
+      if (data.user) {
+        // ล้างฟอร์ม
+        setLoginEmail('');
+        setLoginPassword('');
+        setLoginError('');
+        // ไม่ต้องเรียก loadData() เพราะ auth state listener จะจัดการให้
+        return true;
+      }
+    } catch (error) {
+      setLoginError('เกิดข้อผิดพลาดในการล็อกอิน');
+      return false;
+    }
+  };
+
+  // ฟังก์ชันล็อกเอาท์
+  const handleLogout = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+
+      }
+      
+      setIsLoggedIn(false);
+      setCurrentUser(null);
+      setProfiles([]);
+
+    } catch (error) {
+
+    }
+  };
+
+  // ฟังก์ชันสมัครสมาชิก
+  const handleSignup = async (email, password, confirmPassword, name) => {
+    try {
+      setSignupError('');
+      setSignupSuccess('');
+
+      if (password !== confirmPassword) {
+        setSignupError('รหัสผ่านไม่ตรงกัน');
+        return false;
+      }
+
+      if (!name.trim()) {
+        setSignupError('กรุณากรอกชื่อผู้ใช้');
+        return false;
+      }
+
+
+
+      const { data, error } = await supabase.auth.signUp({
+        email: email,
+        password: password,
+        options: {
+          data: { user_name: name }
+        }
+      });
+
+
+
+      if (error) {
+
+        setSignupError(error.message);
+        return false;
+      }
+
+      setSignupSuccess('สมัครสมาชิกสำเร็จ! กรุณาตรวจสอบอีเมลเพื่อยืนยันตัวตน');
+      // ล้างฟอร์ม
+      setSignupEmail('');
+      setSignupPassword('');
+      setSignupConfirmPassword('');
+      setSignupName('');
+      
+      // ปิด modal และรีเซ็ตโหมดหลัง 3 วินาที
+      setTimeout(() => {
+        setShowLoginModal(false);
+        setIsSignupMode(false);
+        setSignupSuccess('');
+      }, 3000);
+      
+      return true;
+    } catch (error) {
+
+      setSignupError('เกิดข้อผิดพลาดในการสมัครสมาชิก');
+      return false;
+    }
+  };
+
+  // โหลดข้อมูล jobs และ profiles
   useEffect(() => {
-    console.log('useEffect [user] called, user:', user);
-    setLoading(true);
-    console.log('setLoading(true) called in useEffect [user]');
-    setErrorMsg('');
+    if (!loading) {
+      loadData();
+    }
+  }, [loading, isLoggedIn]); // เพิ่ม isLoggedIn เป็น dependency
 
-    const fetchData = async () => {
-      try {
-        // Get current session to ensure access token is valid
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-        console.log('Session data:', sessionData);
-        if (sessionError) throw sessionError;
+  const loadData = async () => {
+    try {
+      setErrorMsg('กำลังโหลดข้อมูล...');
+      
+      // โหลด jobs ก่อน (ไม่ต้องล็อกอินก็ดูได้)
+      const { data: jobsData, error: jobsError } = await supabase
+        .from('jobs')
+        .select('*, due_date_history')
+        .order('created_at', { ascending: true });
+      
+      if (jobsError) {
 
-        // Fetch profiles only if user is logged in
-        if (user) {
-          console.log('Attempting to fetch profiles...');
-          const { data: profilesData, error: profilesError } = await supabase.from('profiles').select('*');
-          console.log('Profiles fetch result:', { data: profilesData, error: profilesError });
-          if (profilesError) throw profilesError;
-          setProfiles(profilesData || []);
-          console.log('profilesRes (inside then):', { data: profilesData, error: profilesError });
-
-          // Existing profile debug logs
-          console.log('user.id:', user.id);
-          console.log('profiles:', profilesData);
-          const found = (profilesData || []).find(
-            (p) => String(p.user_id).trim().toLowerCase() === String(user.id).trim().toLowerCase()
-          );
-          console.log('profile found:', found);
-        } else {
-          setProfiles([]); // Clear profiles if no user
-        }
-
-        // Fetch jobs always
-        console.log('Attempting to fetch jobs...');
-        // เปลี่ยนจาก .select('*') เป็น .select('*, due_date_history')
-        const { data: jobsData, error: jobsError } = await supabase.from('jobs')
-          .select('*, due_date_history')
-          .order('order', { ascending: true })
-          .order('due_date', { ascending: true });
-        console.log('Jobs fetch result:', { data: jobsData, error: jobsError });
-        if (jobsError) throw jobsError;
-        setJobs(sortJobs(jobsData || [])); // ใช้ sortJobs ตรงนี้
-        console.log('jobsRes (inside then):', { data: jobsData, error: jobsError });
-
-        // Debugging: Log type of job IDs
-        if (jobsData && jobsData.length > 0) {
-          console.log('First job ID and its type:', jobsData[0].id, typeof jobsData[0].id);
-        }
-
-        // ใน useEffect ที่ fetch jobs (หลัง setJobs)
-        console.log('Jobs fetch result:', { data: jobsData, error: jobsError });
-        if (jobsData && jobsData.length > 0) {
-          console.log('ตัวอย่าง job:', jobsData[0]);
-        }
+        setErrorMsg('ไม่สามารถโหลดข้อมูลงานได้');
+      } else {
+        setJobs(sortJobs(jobsData || []));
+        
+        // อัปเดต oldDueDates
         const oldDueDatesObj = {};
         (jobsData || []).forEach(job => {
           oldDueDatesObj[job.id] = Array.isArray(job.due_date_history) ? job.due_date_history : [];
         });
-        console.log('oldDueDatesObj:', oldDueDatesObj);
         setOldDueDates(oldDueDatesObj);
+        
 
-      } catch (err) {
-        setErrorMsg('เกิดข้อผิดพลาดในการโหลดข้อมูล: ' + err.message);
-        console.error('Fetch error details (inside catch):', err);
-      } finally {
-        setLoading(false);
-        console.log('useEffect: jobs/profiles loaded, setLoading(false)');
       }
-    };
+      
+      // โหลด profiles ถ้าล็อกอินแล้ว
+      if (isLoggedIn) {
+        const { data: profilesData, error: profilesError } = await supabase
+          .from('profiles')
+          .select('*');
+        
+        if (profilesError) {
 
-    fetchData();
+        } else {
+          setProfiles(profilesData || []);
 
-    // เพิ่ม event listener สำหรับ window focus เพื่อโหลดข้อมูลใหม่เมื่อแท็บกลับมาทำงาน
-    window.addEventListener('focus', fetchData);
+        }
+      }
+      
+      setErrorMsg('');
+    } catch (error) {
 
-    // Cleanup function: ลบ event listener เมื่อ component unmount
-    return () => {
-      window.removeEventListener('focus', fetchData);
-    };
-  }, [user]);
+      setErrorMsg('เกิดข้อผิดพลาดในการโหลดข้อมูล');
+    }
+  };
 
   // คำนวณเปอร์เซ็นต์สำเร็จ (ถ้าไม่มีงานเลย ให้แสดง 100%)
   const totalJobs = jobs.length;
@@ -162,149 +295,36 @@ function App() {
   const circumference = 2 * Math.PI * radius;
   const progress = (percent / 100) * circumference;
 
-  // Auth Modal UI (state แยกใน modal)
-  const AuthModal = ({ show, mode, onClose, onSwitchMode }) => {
-    // --- เพิ่มเติม: โหลด email/password จาก localStorage ---
-    const [email, setEmail] = useState(() => localStorage.getItem('savedEmail') || '');
-    const [password, setPassword] = useState(() => localStorage.getItem('savedPassword') || '');
-    const [rePassword, setRePassword] = useState('');
-    const [userName, setUserName] = useState('');
-    const [authError, setAuthError] = useState('');
-    const [authMsg, setAuthMsg] = useState('');
-
-    useEffect(() => {
-      // --- reset เฉพาะ signup/reset ---
-      if (mode === 'signup' || mode === 'reset') {
-        setEmail('');
-        setPassword('');
-      } else if (mode === 'login' && show) {
-        // โหลด email/password จาก localStorage เฉพาะ login
-        setEmail(localStorage.getItem('savedEmail') || '');
-        setPassword(localStorage.getItem('savedPassword') || '');
-      }
-      setRePassword('');
-      setUserName('');
-      setAuthError('');
-      setAuthMsg('');
-    }, [mode, show]);
-
-    // หลังสมัครสมาชิกสำเร็จ เด้งไปหน้าเข้าสู่ระบบอัตโนมัติ
-    useEffect(() => {
-      if (mode === 'signup' && authMsg) {
-        const timer = setTimeout(() => {
-          onSwitchMode('login');
-        }, 2000);
-        return () => clearTimeout(timer);
-      }
-    }, [authMsg, mode, onSwitchMode]);
-
-    const handleLogin = async (e) => {
-      e.preventDefault();
-      setAuthError(''); setAuthMsg('');
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) setAuthError(error.message);
-      else {
-        // --- save email/password ลง localStorage เฉพาะเครื่องนี้ ---
-        localStorage.setItem('savedEmail', email);
-        localStorage.setItem('savedPassword', password);
-        onClose();
-      }
-    };
-    const handleSignup = async (e) => {
-      e.preventDefault();
-      setAuthError(''); setAuthMsg('');
-      if (password !== rePassword) {
-        setAuthError('รหัสผ่านไม่ตรงกัน');
-        return;
-      }
-      if (!userName.trim()) {
-        setAuthError('กรุณากรอกชื่อผู้ใช้');
-        return;
-      }
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { user_name: userName }
-        }
-      });
-      if (error) setAuthError(error.message);
-      else setAuthMsg('กรุณาตรวจสอบอีเมลเพื่อยืนยันตัวตน');
-    };
-    const handleReset = async (e) => {
-      e.preventDefault();
-      setAuthError(''); setAuthMsg('');
-      const { error } = await supabase.auth.resetPasswordForEmail(email);
-      if (error) setAuthError(error.message);
-      else setAuthMsg('ส่งลิงก์รีเซ็ตรหัสผ่านไปที่อีเมลแล้ว');
-    };
-
-    return (
-      <div
-        className="modal-backdrop"
-        style={{ display: show ? 'flex' : 'none' }}
-      >
-        <div className="modal" onClick={e => e.stopPropagation()}>
-          <button className="modal-close" onClick={onClose}>×</button>
-          {mode === 'login' && (
-            <form onSubmit={handleLogin}>
-              <h2>เข้าสู่ระบบ</h2>
-              <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required autoComplete="username" />
-              <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required autoComplete="current-password" />
-              <button type="submit">เข้าสู่ระบบ</button>
-              <div className="modal-link">
-                <span onClick={() => onSwitchMode('signup')}>สมัครสมาชิก</span> |
-                <span onClick={() => onSwitchMode('reset')}>ลืมรหัสผ่าน?</span>
-              </div>
-              {authError && <div className="modal-error">{authError}</div>}
-            </form>
-          )}
-          {mode === 'signup' && (
-            <form onSubmit={handleSignup}>
-              <h2 style={{ textAlign: 'center' }}>สมัครสมาชิก</h2>
-              <input type="text" placeholder="ชื่อผู้ใช้ (User name)" value={userName} onChange={e => setUserName(e.target.value)} required />
-              <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required autoComplete="username" />
-              <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required autoComplete="new-password" />
-              <input type="password" placeholder="Confirm Password" value={rePassword} onChange={e => setRePassword(e.target.value)} required autoComplete="new-password" />
-              <button type="submit">สมัครสมาชิก</button>
-              <div className="modal-link">
-                <span onClick={() => onSwitchMode('login')}>เข้าสู่ระบบ</span>
-              </div>
-              {authMsg && <div className="modal-success">{authMsg}</div>}
-              {authError && <div className="modal-error">{authError}</div>}
-            </form>
-          )}
-          {mode === 'reset' && (
-            <form onSubmit={handleReset}>
-              <h2>รีเซ็ตรหัสผ่าน</h2>
-              <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required autoComplete="username" />
-              <button type="submit">ส่งลิงก์รีเซ็ตรหัสผ่าน</button>
-              <div className="modal-link">
-                <span onClick={() => onSwitchMode('login')}>เข้าสู่ระบบ</span>
-              </div>
-              {authMsg && <div className="modal-success">{authMsg}</div>}
-              {authError && <div className="modal-error">{authError}</div>}
-            </form>
-          )}
-        </div>
-      </div>
-    );
+  // ฟังก์ชัน modal ล็อกอินแบบใหม่ - เรียบง่าย
+  const handleLoginSubmit = async (e) => {
+    e.preventDefault();
+    await handleLogin(loginEmail, loginPassword);
   };
 
-  // ดึง user_name จาก profiles มาแสดงแทน email (debug ละเอียด)
   const getDisplayName = () => {
-    if (!user) return '';
-    const profile = profiles.find((p) => String(p.user_id).trim().toLowerCase() === String(user.id).trim().toLowerCase());
-    // ถ้าไม่พบโปรไฟล์ ให้แสดง email แทน
-    return profile ? profile.username : user.email;
+    if (!currentUser) return '';
+    const profile = profiles.find((p) => String(p.user_id).trim().toLowerCase() === String(currentUser.id).trim().toLowerCase());
+    
+    // ลำดับการแสดงชื่อ: 1) username จาก profile table, 2) user_name จาก auth metadata, 3) email
+    if (profile && profile.username) {
+      return profile.username;
+    }
+    
+    // ตรวจสอบ user_name จาก auth metadata (จากตอนสมัครสมาชิก)
+    if (currentUser.user_metadata && currentUser.user_metadata.user_name) {
+      return currentUser.user_metadata.user_name;
+    }
+    
+    // fallback เป็น email ถ้าไม่มีข้อมูลอื่น
+    return currentUser.email;
   };
 
   // ฟังก์ชัน map user_id เป็น username
   const getUsernameById = (userId) => {
     const profile = profiles.find((p) => String(p.user_id).trim().toLowerCase() === String(userId).trim().toLowerCase());
-    // หา user จาก auth ถ้าไม่มี profile
+    // หา currentUser จาก auth ถ้าไม่มี profile
     if (profile) return profile.username;
-    if (user && String(user.id).trim().toLowerCase() === String(userId).trim().toLowerCase()) return user.email;
+    if (currentUser && String(currentUser.id).trim().toLowerCase() === String(userId).trim().toLowerCase()) return currentUser.email;
     return '-';
   };
 
@@ -383,7 +403,7 @@ function App() {
           }}
           autoFocus
           className="due-date-editable"
-          disabled={job.status === 'เสร็จแล้ว' || !user}
+          disabled={job.status === 'เสร็จแล้ว' || !currentUser}
         />
       );
     }
@@ -410,12 +430,8 @@ function App() {
         }}
         title={job.status !== 'เสร็จแล้ว' ? 'คลิกเพื่อแก้ไขวันที่' : ''}
       >
-        {(() => {
-          console.log(`Checking history for job ${job.id}:`, oldDueDates[job.id]);
-          return oldDueDates[job.id] && oldDueDates[job.id].length > 0;
-        })() && (
+        {oldDueDates[job.id] && oldDueDates[job.id].length > 0 && (
           <div className="due-date-history">
-            {console.log(`Rendering history for job ${job.id}:`, oldDueDates[job.id])}
             {oldDueDates[job.id].slice(0, 3).map((oldDate, index) => (
               <div
                 key={index}
@@ -449,7 +465,7 @@ function App() {
         )}
         <div className="date-content">
           <span>{formatDateToYYMMDD(job.due_date)}</span>
-          {job.status !== 'เสร็จแล้ว' && user && (
+          {job.status !== 'เสร็จแล้ว' && currentUser && (
             <span className="edit-icon">✎</span>
           )}
         </div>
@@ -480,7 +496,6 @@ function App() {
 
   // ฟังก์ชันจัดเรียงงาน: 1) ยังไม่เสร็จ+มี due_date (วันใกล้สุดก่อน), 2) ยังไม่เสร็จ+ไม่มี due_date, 3) เสร็จแล้ว (ล่างสุด)
   const sortJobs = (jobsArray) => {
-    console.log('sortJobs called with:', jobsArray.length, 'jobs');
     const sorted = [...jobsArray].sort((a, b) => {
       const isACompleted = a.status === 'เสร็จแล้ว';
       const isBCompleted = b.status === 'เสร็จแล้ว';
@@ -506,8 +521,8 @@ function App() {
         if (hasDueA && !hasDueB) return -1;
         if (!hasDueA && hasDueB) return 1;
         
-        // กลุ่ม 2: ทั้งคู่ไม่มี due_date → เรียงตามวันที่สร้าง (ใหม่สุดอยู่บน)
-        return new Date(b.created_at) - new Date(a.created_at);
+        // กลุ่ม 2: ทั้งคู่ไม่มี due_date → เรียงตามวันที่สร้าง (เก่าสุดอยู่บน, ใหม่สุดอยู่ล่าง)
+        return new Date(a.created_at) - new Date(b.created_at);
       }
       
       // ทั้งคู่เสร็จแล้ว → เรียงตามวันที่เสร็จ (ใหม่สุดอยู่ล่าง)
@@ -520,51 +535,65 @@ function App() {
       return 0;
     });
     
-    console.log('Sorted jobs - Completed at bottom:', sorted.filter(j => j.status === 'เสร็จแล้ว').length);
     return sorted;
   };
 
   // ฟังก์ชันลบงาน
   const handleDeleteJob = async (id) => {
-    if (!user) {
+    if (!currentUser) {
       alert('กรุณาเข้าสู่ระบบ');
       return;
     }
-    console.log('พยายามลบงาน id:', id);
     const { error } = await supabase.from('jobs').delete().eq('id', id);
     if (!error) {
       const { data: jobsData, error: jobsError } = await supabase.from('jobs')
-        .select('*')
+        .select('*, due_date_history')
         .order('order', { ascending: true })
         .order('due_date', { ascending: true });
       if (!jobsError) {
         setJobs(sortJobs(jobsData || []));
+        // อัปเดต oldDueDates state หลังจากลบงาน
+        const oldDueDatesObj = {};
+        (jobsData || []).forEach(job => {
+          oldDueDatesObj[job.id] = Array.isArray(job.due_date_history) ? job.due_date_history : [];
+        });
+        setOldDueDates(oldDueDatesObj);
       } else {
         alert('เกิดข้อผิดพลาดในการโหลดงานใหม่: ' + jobsError.message);
-        console.error('Reload jobs error:', jobsError);
       }
     } else {
       alert('เกิดข้อผิดพลาดในการลบงาน: ' + error.message);
-      console.error('Delete job error:', error);
     }
   };
 
   // ฟังก์ชันเพิ่มงาน
   const handleAddJob = async () => {
-    if (!user) return;
+    if (!currentUser) {
+      alert('กรุณาเข้าสู่ระบบก่อนเพิ่มงาน');
+      return;
+    }
 
     const newJobTitle = newJob.trim();
-    const newJobAssignee = newAssignedTo.trim();
+    const newJobAssignee = selectedPeople.length > 0 ? selectedPeople.join(', ') : '';
     const newJobDueDate = newDueDate.trim();
 
-    if (newJobTitle) {
-      setLoading(true);
-      const { data, error } = await supabase
+    if (!newJobTitle) {
+      alert('กรุณากรอกหัวข้องาน');
+      return;
+    }
+
+
+    setOperationLoading(true);
+    setErrorMsg('กำลังเพิ่มงานใหม่... ⏳');
+    
+    try {
+      // เพิ่ม timeout สำหรับการเพิ่มงาน
+      const insertPromise = supabase
         .from('jobs')
         .insert({
           title: newJobTitle,
           assigned_to: newJobAssignee,
-          user_id: user.id,
+          user_id: currentUser.id,
           assigned_date: new Date().toISOString().slice(0, 10),
           status: 'ดำเนินการอยู่',
           due_date: newJobDueDate || null,
@@ -572,33 +601,73 @@ function App() {
         })
         .select();
 
-      // ดึง jobs ทั้งหมดมาใหม่ (ไม่ใช้ jobs เดิมใน state)
-      const { data: jobsData, error: jobsError } = await supabase.from('jobs')
-        .select('*')
-        .order('order', { ascending: true })
-        .order('due_date', { ascending: true });
-      if (!error && !jobsError) {
-        setJobs(sortJobs(jobsData || []));
-        localStorage.removeItem('jobsOrder'); // ลบ jobsOrder เดิมเพื่อไม่ให้ override ลำดับใหม่
-        setNewJob('');
-        setNewAssignedTo('');
-        setNewDueDate('');
-      } else {
-        alert('เกิดข้อผิดพลาดในการเพิ่มงาน: ' + (error?.message || jobsError?.message));
-        console.error('Error adding job:', error, jobsError);
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('การเพิ่มงานใช้เวลานานเกินไป (timeout 15 วินาที)')), 15000);
+      });
+
+      const { data, error } = await Promise.race([insertPromise, timeoutPromise]);
+
+      if (error) {
+        throw new Error(error.message);
       }
-      setLoading(false);
+
+
+
+      // ดึง jobs ทั้งหมดมาใหม่ (ไม่ใช้ jobs เดิมใน state)
+      const fetchJobsPromise = supabase.from('jobs')
+        .select('*, due_date_history')
+        .order('created_at', { ascending: true });
+
+      const { data: jobsData, error: jobsError } = await Promise.race([
+        fetchJobsPromise, 
+        new Promise((_, reject) => setTimeout(() => reject(new Error('โหลดข้อมูลงานใช้เวลานานเกินไป')), 10000))
+      ]);
+
+      if (jobsError) {
+        throw new Error('ไม่สามารถโหลดข้อมูลงานใหม่ได้: ' + jobsError.message);
+      }
+
+      // อัปเดต state และ cache
+      setJobs(sortJobs(jobsData || []));
+      
+      // อัปเดต oldDueDates state หลังจากเพิ่มงานใหม่
+      const oldDueDatesObj = {};
+      (jobsData || []).forEach(job => {
+        oldDueDatesObj[job.id] = Array.isArray(job.due_date_history) ? job.due_date_history : [];
+      });
+      setOldDueDates(oldDueDatesObj);
+      
+      // อัปเดต cache
+      localStorage.setItem('cachedJobs', JSON.stringify(jobsData));
+      localStorage.removeItem('jobsOrder'); // ลบ jobsOrder เดิมเพื่อไม่ให้ override ลำดับใหม่
+      
+      // ล้าง form
+      setNewJob('');
+      setSelectedPeople([]); // Clear selected people
+      setNewDueDate('');
+      
+      setErrorMsg('เพิ่มงานใหม่สำเร็จ! ✅');
+      setTimeout(() => setErrorMsg(''), 3000);
+
+    } catch (err) {
+
+      const errorMessage = err.message || 'เกิดข้อผิดพลาดไม่ทราบสาเหตุ';
+      alert('ไม่สามารถเพิ่มงานได้: ' + errorMessage);
+      setErrorMsg('การเพิ่มงานล้มเหลว: ' + errorMessage);
+    } finally {
+
+      setOperationLoading(false);
     }
   };
 
   // ฟังก์ชันสำหรับเปลี่ยนสถานะ
   const handleStatusChange = async (jobId, newStatus, completedDate) => {
-    if (!user) {
+    if (!currentUser) {
       alert('กรุณาเข้าสู่ระบบเพื่อเปลี่ยนสถานะ');
       return;
     }
 
-    console.log(`Attempting to update job ${jobId} to status: ${newStatus}, completed_date: ${completedDate}`);
+
     const { data: updatedJob, error } = await supabase
       .from('jobs')
       .update({ status: newStatus, completed_date: completedDate })
@@ -606,12 +675,12 @@ function App() {
       .select();
 
     if (error) {
-      console.error('Error updating status to Supabase:', error);
+
       alert('เกิดข้อผิดพลาดในการเปลี่ยนสถานะ: ' + error.message);
       return; // Exit if update fails
     }
 
-    console.log(`Supabase update successful for job ${jobId}. Data:`, updatedJob);
+
 
     if (newStatus === 'เสร็จแล้ว') {
       // อัปเดตสถานะใน local state ก่อนเพื่อเริ่ม Animation
@@ -626,32 +695,38 @@ function App() {
     } else {
       // หากเปลี่ยนสถานะอื่นที่ไม่ใช่ 'เสร็จแล้ว' ให้รีโหลดและจัดเรียงทันที
       const { data: jobsData, error: jobsError } = await supabase.from('jobs')
-        .select('*')
+        .select('*, due_date_history')
         .order('order', { ascending: true })
         .order('due_date', { ascending: true }); 
       if (!jobsError) {
         setJobs(sortJobs(jobsData) || []);
-        console.log('Jobs state updated for non-"เสร็จแล้ว" status with sorted data (full reload).');
+        // อัปเดต oldDueDates state หลังจากเปลี่ยนสถานะ
+        const oldDueDatesObj = {};
+        (jobsData || []).forEach(job => {
+          oldDueDatesObj[job.id] = Array.isArray(job.due_date_history) ? job.due_date_history : [];
+        });
+        setOldDueDates(oldDueDatesObj);
+
       } else {
         alert('เกิดข้อผิดพลาดในการโหลดงานใหม่หลังจากเปลี่ยนสถานะ: ' + jobsError.message);
-        console.error('Error fetching jobs after status update:', jobsError);
+
       }
     }
   };
 
   // ฟังก์ชันบันทึก due_date ใหม่
   const handleSaveDueDate = async (jobId, newDate) => {
-    if (!user) {
+    if (!currentUser) {
       alert('กรุณาเข้าสู่ระบบเพื่อแก้ไขวันที่คาดการณ์');
       return;
     }
-    console.log(`=== handleSaveDueDate called ===`);
-    console.log(`Job ID: ${jobId}`);
-    console.log(`New Date: ${newDate}`);
+
+
+
     
     const currentJob = jobs.find(j => j.id === jobId);
     const currentDueDate = currentJob?.due_date;
-    console.log(`Current Due Date: ${currentDueDate}`);
+
     
     // เก็บประวัติการแก้ไขวันที่ (วันที่เก่าจะถูกดันขึ้นไปด้านบน)
     let newHistory = oldDueDates[jobId] || [];
@@ -673,14 +748,9 @@ function App() {
     setNewDueDateValue('');
     
     // ถ้าล็อกอินแล้ว ให้บันทึกลง Supabase
-    if (user) {
+    if (currentUser) {
       setLoading(true);
-      // เพิ่ม log ตรงนี้
-      console.log('จะอัปเดต Supabase:', {
-        jobId,
-        due_date: newDate,
-        due_date_history: newHistory
-      });
+      
       const { data: updatedJob, error } = await supabase
         .from('jobs')
         .update({ 
@@ -690,33 +760,18 @@ function App() {
         .eq('id', jobId)
         .select();
       // เพิ่ม log ตรงนี้
-      console.log('Supabase update result:', { data: updatedJob, error });
+
       setLoading(false);
       
       if (error) {
         alert('เกิดข้อผิดพลาดในการอัปเดตวันที่คาดการณ์');
-        console.error('Error updating due date:', error);
+
       }
     }
   };
 
-  const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      console.error('Logout error:', error);
-      alert('เกิดข้อผิดพลาดในการออกจากระบบ: ' + error.message);
-    } else {
-      window.location.reload(); // รีเฟรชหน้าเว็บทันที
-      return; // ไม่ต้อง setUser/setProfiles/setLoading ต่อ
-      // setUser(null);
-      // setProfiles([]);
-      // setLoading(false);
-      // console.log('Logged out successfully.');
-    }
-  };
-
   const handleEditRemark = (jobId, currentRemark) => {
-    // ไม่ต้องตรวจสอบ user แล้ว ให้แก้ไขได้เลย
+    // ไม่ต้องตรวจสอบ currentUser แล้ว ให้แก้ไขได้เลย
     setEditingRemarkId(jobId);
     setNewRemark(currentRemark || ''); // กำหนดค่า input ด้วยข้อความเดิม
   };
@@ -725,7 +780,7 @@ function App() {
     setLoading(true);
     
     // ถ้าไม่ล็อกอิน ให้อัปเดตเฉพาะใน local state
-    if (!user) {
+    if (!currentUser) {
       const updatedJobs = jobs.map(j => j.id === jobId ? { ...j, remark: newRemarkContent } : j);
       setJobs(updatedJobs);
       setEditingRemarkId(null);
@@ -745,20 +800,61 @@ function App() {
     if (!error) {
       // หลังจากบันทึก Remark สำเร็จ ให้ดึงงานทั้งหมดมาใหม่แล้วจัดเรียง
       const { data: jobsData, error: jobsError } = await supabase.from('jobs')
-        .select('*')
+        .select('*, due_date_history')
         .order('order', { ascending: true })
         .order('due_date', { ascending: true }); // ดึงมาตาม created_at ก่อน แล้วค่อยมาเรียง client-side
       if (!jobsError) {
         setJobs(sortJobs(jobsData || [])); // ใช้ sortJobs ตรงนี้
+        // อัปเดต oldDueDates state หลังจากบันทึก Remark
+        const oldDueDatesObj = {};
+        (jobsData || []).forEach(job => {
+          oldDueDatesObj[job.id] = Array.isArray(job.due_date_history) ? job.due_date_history : [];
+        });
+        setOldDueDates(oldDueDatesObj);
       } else {
         alert('เกิดข้อผิดพลาดในการโหลดงานใหม่หลังจากบันทึก Remark: ' + jobsError.message);
-        console.error('Error fetching jobs after remark update:', jobsError);
+
       }
       setEditingRemarkId(null);
       setNewRemark('');
     } else {
       alert('เกิดข้อผิดพลาดในการบันทึก Remark: ' + error.message);
-      console.error('Error saving remark:', error);
+
+    }
+  };
+
+  const handleCapture = async () => {
+    try {
+      // ใช้ html2canvas สำหรับแคปภาพตาราง
+      const html2canvas = (await import('html2canvas')).default;
+      const table = document.querySelector('.job-table');
+      if (!table) {
+        alert('ไม่พบตารางที่จะแคปภาพ');
+        return;
+      }
+      
+      const canvas = await html2canvas(table, {
+        backgroundColor: '#ffffff',
+        scale: 2, // ความละเอียดสูง
+        useCORS: true
+      });
+      
+      // แปลง canvas เป็น blob แล้วคัดลอกไปยัง clipboard
+      canvas.toBlob(async (blob) => {
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({ 'image/png': blob })
+          ]);
+          alert('คัดลอกภาพตารางไปยัง clipboard แล้ว! สามารถนำไปวางได้');
+        } catch (clipboardError) {
+
+          alert('ไม่สามารถคัดลอกไปยัง clipboard ได้ กรุณาลองใหม่');
+        }
+      }, 'image/png');
+      
+    } catch (error) {
+
+      alert('เกิดข้อผิดพลาดในการแคปภาพ: ' + error.message);
     }
   };
 
@@ -849,16 +945,7 @@ function App() {
   // ล้างประวัติการแก้ไขวันที่เมื่อโหลดหน้าใหม่
   useEffect(() => {
     // setOldDueDates({}); // ลบบรรทัดนี้ออก
-  }, [user]);
-
-  // Debug: แสดงประวัติการแก้ไขวันที่
-  useEffect(() => {
-    console.log('Current oldDueDates:', oldDueDates);
-    console.log('oldDueDates keys:', Object.keys(oldDueDates));
-    Object.keys(oldDueDates).forEach(key => {
-      console.log(`Job ${key} history:`, oldDueDates[key]);
-    });
-  }, [oldDueDates]);
+  }, [currentUser]);
 
   // หลังจากเพิ่ม/ลบ/เปลี่ยน jobs ให้บันทึกลำดับใหม่ลง localStorage
   useEffect(() => {
@@ -869,56 +956,441 @@ function App() {
 
   return (
     <div className="App">
-      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 10 }}>
-        {user ? (
+      {/* แสดงสถานะการโหลดข้อมูล */}
+      {(loading || operationLoading) && (
+        <div style={{ 
+          position: 'fixed', 
+          top: '10px', 
+          right: '10px', 
+          background: '#007bff', 
+          color: 'white', 
+          padding: '8px 12px', 
+          borderRadius: '4px',
+          fontSize: '14px',
+          zIndex: 1000
+        }}>
+          {loading ? 'กำลังตรวจสอบ session...' : 'กำลังดำเนินการ...'}
+        </div>
+      )}
+      
+      {/* แสดง error message */}
+      {errorMsg && (
+        <div style={{ 
+          position: 'fixed', 
+          top: '50px', 
+          right: '10px', 
+          background: '#dc3545', 
+          color: 'white', 
+          padding: '8px 12px', 
+          borderRadius: '4px',
+          fontSize: '14px',
+          zIndex: 1000,
+          maxWidth: '300px',
+          wordWrap: 'break-word'
+        }}>
+          {errorMsg}
+          <button 
+            onClick={() => setErrorMsg('')}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'white',
+              marginLeft: '8px',
+              cursor: 'pointer'
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+      
+      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 10, gap: '8px' }}>
+        {isLoggedIn ? (
           <>
-            <span style={{ marginRight: 8 }}>เข้าสู่ระบบ: {getDisplayName()}</span>
-            <button onClick={handleLogout}>Logout</button>
+            <span style={{ marginRight: 8 }}>{getDisplayName()}</span>
+            <button 
+              onClick={() => setShowUserMenu(true)}
+              style={{ 
+                background: '#6c757d', 
+                color: 'white', 
+                border: 'none', 
+                padding: '4px 8px', 
+                borderRadius: '4px',
+                fontSize: '12px',
+                marginLeft: '5px'
+              }}
+              title="เมนูผู้ใช้"
+            >
+              ⋯
+            </button>
           </>
         ) : (
-          <button onClick={() => { setShowAuthModal(true); setAuthMode('login'); }}>ล็อกอิน</button>
+          <button 
+            onClick={() => setShowLoginModal(true)}
+            style={{
+              background: 'linear-gradient(135deg, #007bff, #0056b3)',
+              border: 'none',
+              borderRadius: '8px',
+              color: 'white',
+              padding: '10px 20px',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              boxShadow: '0 2px 8px rgba(0, 123, 255, 0.3)',
+              letterSpacing: '0.5px'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = 'linear-gradient(135deg, #0056b3, #004085)';
+              e.target.style.transform = 'translateY(-2px)';
+              e.target.style.boxShadow = '0 4px 12px rgba(0, 123, 255, 0.4)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = 'linear-gradient(135deg, #007bff, #0056b3)';
+              e.target.style.transform = 'translateY(0)';
+              e.target.style.boxShadow = '0 2px 8px rgba(0, 123, 255, 0.3)';
+            }}
+          >
+            <span style={{ fontSize: '16px' }}>🔐</span>
+            Login
+          </button>
         )}
       </div>
       {errorMsg && <div style={{ color: 'red', textAlign: 'center' }}>{errorMsg}</div>}
-      <AuthModal show={showAuthModal} mode={authMode} onClose={() => setShowAuthModal(false)} onSwitchMode={setAuthMode} />
-      <h1>Coilmaster Electronics - Weekly Job Dashboard</h1>
-      <div className="add-job">
-        <textarea // เปลี่ยนจาก input เป็น textarea
-          rows="3" // กำหนดความสูงเริ่มต้น
-          placeholder="หัวข้อใหม่" // ย้าย placeholder มาที่นี่
-          value={newJob}
-          onChange={(e) => setNewJob(e.target.value)}
-          disabled={!user}
-          style={{ width: '100%', minHeight: '60px', boxSizing: 'border-box', resize: 'vertical' }} // เพิ่ม style
-        />
-        <input
-          type="text"
-          placeholder="ผู้รับผิดชอบ"
-          value={newAssignedTo}
-          onChange={(e) => setNewAssignedTo(e.target.value)}
-          disabled={!user}
-        />
-        <input
-          type="date"
-          value={newDueDate}
-          onChange={(e) => setNewDueDate(e.target.value)}
-          placeholder="วันที่ครบกำหนด"
-          disabled={!user}
-        />
+      
+      {/* Login/Signup Modal */}
+      {showLoginModal && (
+        <div className="modal-backdrop" onClick={() => {
+          setShowLoginModal(false);
+          setIsSignupMode(false);
+          setLoginError('');
+          setSignupError('');
+          setSignupSuccess('');
+        }}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => {
+              setShowLoginModal(false);
+              setIsSignupMode(false);
+              setLoginError('');
+              setSignupError('');
+              setSignupSuccess('');
+            }}>×</button>
+            
+            {!isSignupMode ? (
+              /* Login Form */
+              <form onSubmit={handleLoginSubmit}>
+                <h2>เข้าสู่ระบบ</h2>
+                <input 
+                  type="email" 
+                  placeholder="Email" 
+                  value={loginEmail} 
+                  onChange={e => setLoginEmail(e.target.value)} 
+                  required 
+                  autoComplete="username"
+                />
+                <input 
+                  type="password" 
+                  placeholder="Password" 
+                  value={loginPassword} 
+                  onChange={e => setLoginPassword(e.target.value)} 
+                  required 
+                  autoComplete="current-password"
+                />
+                <button type="submit">เข้าสู่ระบบ</button>
+                {loginError && <div className="modal-error">{loginError}</div>}
+                
+                <div style={{ textAlign: 'center', marginTop: '15px', borderTop: '1px solid #eee', paddingTop: '15px' }}>
+                  <span style={{ color: '#666' }}>ยังไม่มีบัญชี? </span>
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setIsSignupMode(true);
+                      setLoginError('');
+                    }}
+                    style={{ 
+                      background: 'none', 
+                      border: 'none', 
+                      color: '#007bff', 
+                      textDecoration: 'underline', 
+                      cursor: 'pointer' 
+                    }}
+                  >
+                    สมัครสมาชิก
+                  </button>
+                </div>
+              </form>
+            ) : (
+              /* Signup Form */
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                await handleSignup(signupEmail, signupPassword, signupConfirmPassword, signupName);
+              }}>
+                <h2>สมัครสมาชิก</h2>
+                <input 
+                  type="text" 
+                  placeholder="ชื่อผู้ใช้" 
+                  value={signupName} 
+                  onChange={e => setSignupName(e.target.value)} 
+                  required 
+                />
+                <input 
+                  type="email" 
+                  placeholder="Email" 
+                  value={signupEmail} 
+                  onChange={e => setSignupEmail(e.target.value)} 
+                  required 
+                  autoComplete="username"
+                />
+                <input 
+                  type="password" 
+                  placeholder="รหัสผ่าน" 
+                  value={signupPassword} 
+                  onChange={e => setSignupPassword(e.target.value)} 
+                  required 
+                  autoComplete="new-password"
+                />
+                <input 
+                  type="password" 
+                  placeholder="ยืนยันรหัสผ่าน" 
+                  value={signupConfirmPassword} 
+                  onChange={e => setSignupConfirmPassword(e.target.value)} 
+                  required 
+                  autoComplete="new-password"
+                />
+                <button type="submit">สมัครสมาชิก</button>
+                {signupError && <div className="modal-error">{signupError}</div>}
+                {signupSuccess && <div className="modal-success">{signupSuccess}</div>}
+                
+                <div style={{ textAlign: 'center', marginTop: '15px', borderTop: '1px solid #eee', paddingTop: '15px' }}>
+                  <span style={{ color: '#666' }}>มีบัญชีแล้ว? </span>
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setIsSignupMode(false);
+                      setSignupError('');
+                      setSignupSuccess('');
+                    }}
+                    style={{ 
+                      background: 'none', 
+                      border: 'none', 
+                      color: '#007bff', 
+                      textDecoration: 'underline', 
+                      cursor: 'pointer' 
+                    }}
+                  >
+                    เข้าสู่ระบบ
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* User Menu Modal */}
+      {showUserMenu && (
+        <div className="modal-backdrop" onClick={() => setShowUserMenu(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ minWidth: '280px' }}>
+            <button className="modal-close" onClick={() => setShowUserMenu(false)}>×</button>
+            <div style={{ padding: '20px', textAlign: 'center' }}>
+              <div style={{ 
+                marginBottom: '20px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '10px'
+              }}>
+                <div style={{ 
+                  width: '50px', 
+                  height: '50px', 
+                  borderRadius: '50%', 
+                  background: 'linear-gradient(135deg, #007bff, #0056b3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white',
+                  fontSize: '20px',
+                  fontWeight: 'bold'
+                }}>
+                  👤
+                </div>
+                <div style={{ color: '#6c757d', fontSize: '12px', fontWeight: '500' }}>
+                  ผู้ใช้งาน
+                </div>
+              </div>
+              
+              <div style={{ 
+                background: '#f8f9fa', 
+                padding: '15px', 
+                borderRadius: '8px', 
+                marginBottom: '20px',
+                border: '1px solid #dee2e6',
+                position: 'relative'
+              }}>
+                <div style={{ 
+                  position: 'absolute',
+                  top: '-8px',
+                  left: '12px',
+                  background: '#f8f9fa',
+                  padding: '0 8px',
+                  fontSize: '10px',
+                  color: '#6c757d',
+                  fontWeight: '500'
+                }}>
+                  USERNAME
+                </div>
+                <div style={{ 
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  color: '#333',
+                  marginTop: '5px'
+                }}>
+                  {getDisplayName()}
+                </div>
+              </div>
+              
+              <button 
+                onClick={() => {
+                  handleLogout();
+                  setShowUserMenu(false);
+                }}
+                style={{ 
+                  background: '#dc3545', 
+                  color: 'white', 
+                  border: 'none', 
+                  padding: '10px 20px', 
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  width: '100%',
+                  fontWeight: '500',
+                  transition: 'background-color 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = '#c82333';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = '#dc3545';
+                }}
+              >
+                🚪 ออกจากระบบ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+        <h1 style={{ margin: '0' }}>Coilmaster Electronics - Weekly Job Dashboard</h1>
         <button 
-          onClick={handleAddJob} 
-          disabled={!user}
-          className={!user ? 'add-job-disabled' : 'add-job-active'}
-        >เพิ่มหัวข้อ</button>
-        <button onClick={handleExport} className="export-button">Export</button>
+          onClick={handleCapture}
+          style={{
+            background: '#6c757d',
+            border: 'none',
+            borderRadius: '6px',
+            color: 'white',
+            padding: '8px 16px',
+            fontSize: '13px',
+            fontWeight: '600',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.background = '#545b62';
+            e.target.style.transform = 'translateY(-1px)';
+            e.target.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.background = '#6c757d';
+            e.target.style.transform = 'translateY(0)';
+            e.target.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+          }}
+          title="แคปภาพตาราง"
+        >
+          Capture
+        </button>
       </div>
+      
+      {/* แสดงส่วนเพิ่มงานเฉพาะเมื่อล็อกอินแล้ว */}
+      {isLoggedIn && (
+        <div className="add-job">
+          <textarea // เปลี่ยนจาก input เป็น textarea
+            rows="3" // กำหนดความสูงเริ่มต้น
+            placeholder="หัวข้อใหม่" // ย้าย placeholder มาที่นี่
+            value={newJob}
+            onChange={(e) => setNewJob(e.target.value)}
+            disabled={!currentUser}
+            style={{ width: '100%', minHeight: '60px', boxSizing: 'border-box', resize: 'vertical' }} // เพิ่ม style
+          />
+          <div className="people-selection" style={{ border: '1px solid #ccc', borderRadius: '3px', padding: '4px', marginBottom: '4px' }}>
+            <div style={{ marginBottom: '4px', fontWeight: 'bold', color: '#555', fontSize: '12px' }}>เลือกผู้รับผิดชอบ:</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '2px', fontSize: '11px' }}>
+              {['Aoair', 'Neno', 'Sam', 'Fin', 'Toy', 'Katae', 'Ning', 'Noi', 'Paew', 'Toei', 'Pop', 'June', 'Heng', 'Ao', 'Donut', 'Ploy', 'Garfield', 'ALL'].map(person => (
+                <label key={person} style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', padding: '1px' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedPeople.includes(person)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedPeople([...selectedPeople, person]);
+                      } else {
+                        setSelectedPeople(selectedPeople.filter(p => p !== person));
+                      }
+                    }}
+                    disabled={!currentUser}
+                    style={{ marginRight: '3px', transform: 'scale(0.8)' }}
+                  />
+                  <span>{person}</span>
+                </label>
+              ))}
+            </div>
+            {selectedPeople.length > 0 && (
+              <div style={{ marginTop: '4px', fontSize: '10px', color: '#666' }}>
+                เลือกแล้ว: {selectedPeople.join(', ')}
+              </div>
+            )}
+          </div>
+          <input
+            type="date"
+            value={newDueDate}
+            onChange={(e) => setNewDueDate(e.target.value)}
+            placeholder="วันที่ครบกำหนด"
+            disabled={!currentUser}
+          />
+          <button 
+            onClick={handleAddJob} 
+            disabled={!currentUser || operationLoading}
+            className={(!currentUser || operationLoading) ? 'add-job-disabled' : 'add-job-active'}
+            style={{
+              opacity: (!currentUser || operationLoading) ? 0.6 : 1,
+              cursor: (!currentUser || operationLoading) ? 'not-allowed' : 'pointer',
+              backgroundColor: (!currentUser || operationLoading) ? '#6c757d' : '#28a745',
+              color: 'white',
+              border: 'none',
+              padding: '8px 16px',
+              borderRadius: '4px',
+              fontSize: '14px',
+              fontWeight: '600'
+            }}
+          >
+            {operationLoading ? 'กำลังเพิ่มงาน...' : 'เพิ่มหัวข้อ'}
+          </button>
+        </div>
+      )}
 
       {/* Loading jobs message */}
-      {loading && jobs.length === 0 && (
+      {(loading || operationLoading) && jobs.length === 0 && (
         <div style={{ color: '#888', marginBottom: 8 }}>Loading jobs...</div>
       )}
 
-      <div style={{ overflowX: 'auto' }}>
+      <div className="table-container" style={{ overflowX: 'auto' }}>
         <table className="job-table job-table-animated">
           <colgroup>
             <col style={{ width: '5%' }} />{/* ลำดับ */}
@@ -933,20 +1405,19 @@ function App() {
           </colgroup>
           <thead>
             <tr>
-              <th>ลำดับ</th>
-              <th>เนื้อหางาน</th>
-              <th>ผู้รับผิดชอบ</th>
-              <th>วันที่ได้รับงาน</th>
-              <th>วันที่คาดการ</th>
-              <th>วันที่เสร็จ</th>
-              <th>หมายเหตุ</th>
-              <th>สถานะ</th>
-              <th>ดำเนินการ</th>
+              <th>No.</th>
+              <th>Job Title</th>
+              <th>Assignee</th>
+              <th>Assigned Date</th>
+              <th>Due Date</th>
+              <th>Completed Date</th>
+              <th>Remarks</th>
+              <th>Status</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody
             style={{
-              background: draggingOverIndex !== null ? '#e3f2fd' : undefined,
               transition: 'background 0.2s',
               position: 'relative'
             }}
@@ -954,9 +1425,6 @@ function App() {
             {jobs.map((job, index) => {
               // หาตำแหน่ง drop gap
               let gapStyle = {};
-              if (draggingOverIndex !== null && draggingOverIndex === index) {
-                gapStyle = { paddingTop: 24, transition: 'padding 0.2s' };
-              }
               return (
                 <React.Fragment key={job.id}>
                   {/* ลบตัวแปร isDropGap และการใช้งานออก (ไม่มีในโค้ดนี้แล้ว) */}
@@ -968,11 +1436,18 @@ function App() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -20 }}
                       transition={{ duration: 0.4, type: 'spring', stiffness: 60 }}
-                      className={`job-row ${job.status === 'เสร็จแล้ว' ? 'completed' : ''} ${job.id === animatingJobId && job.status === 'เสร็จแล้ว' ? 'job-completed-fade-out newly-completed' : ''}`}
-                      style={gapStyle}
+                      className={`job-row ${job.status === 'เสร็จแล้ว' ? 'completed' : ''} ${job.id === animatingJobId && job.status === 'เสร็จแล้ว' ? 'job-completed-fade-out newly-completed' : ''} ${job.isOffline ? 'offline-job' : ''}`}
+                      style={{
+                        ...gapStyle,
+                        backgroundColor: job.isOffline ? '#fff3cd' : 'inherit',
+                        borderLeft: job.isOffline ? '4px solid #ffc107' : 'none'
+                      }}
                     >
                       <td style={gapStyle}>{index + 1}</td>
-                      <td style={gapStyle} dangerouslySetInnerHTML={{ __html: job.title.replace(/\n/g, '<br/>') }} />
+                      <td style={gapStyle}>
+                        {job.isOffline && <span style={{ color: '#856404', fontSize: '10px' }}>📱 OFFLINE </span>}
+                        <span dangerouslySetInnerHTML={{ __html: job.title.replace(/\n/g, '<br/>') }} />
+                      </td>
                       <td style={gapStyle}>{job.assigned_to || '-'}</td>
                       <td style={gapStyle}>{formatDateToYYMMDD(job.assigned_date)}</td>
                       <td style={gapStyle}>
@@ -990,12 +1465,13 @@ function App() {
                             const newCompletedDate = newStatus === 'เสร็จแล้ว' ? new Date().toISOString().split('T')[0] : null;
                             handleStatusChange(job.id, newStatus, newCompletedDate);
                           }}
-                          disabled={!user}
-                          className={!user ? 'disabled-select' : ''}
+                          disabled={!currentUser}
+                          className={!currentUser ? 'disabled-select' : ''}
                         >
                           <option value="ดำเนินการอยู่">ดำเนินการ</option>
                           <option value="รออนุมัติ">รออนุมัติ</option>
                           <option value="เลื่อน">เลื่อน</option>
+                          <option value="ยกเลิก">ยกเลิก</option>
                           <option value="เสร็จแล้ว">เสร็จแล้ว</option>
                         </select>
                       </td>
@@ -1005,16 +1481,51 @@ function App() {
                             ลบ
                           </button>
                         ) : (
-                          <button className="button-on-process" disabled={true}>
-                            On process
+                          <button 
+                            disabled={true}
+                            style={{
+                              width: '100%',
+                              boxSizing: 'border-box',
+                              display: 'block',
+                              backgroundColor: 
+                                job.status === 'ดำเนินการอยู่' ? '#007bff' :
+                                job.status === 'รออนุมัติ' ? '#fd7e14' :
+                                job.status === 'เลื่อน' ? '#ffffff' :
+                                job.status === 'ยกเลิก' ? '#dc3545' : '#6c757d',
+                              color: job.status === 'เลื่อน' ? '#000000' : 'white',
+                              border: job.status === 'เลื่อน' ? '1px solid #dee2e6' : 'none',
+                              borderRadius: '8px',
+                              padding: '8px 12px',
+                              cursor: 'pointer',
+                              fontSize: '0.875rem',
+                              fontWeight: '600',
+                              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                            }}
+                          >
+                            {job.status === 'ดำเนินการอยู่' ? 'On process' :
+                             job.status === 'รออนุมัติ' ? 'Pending Approval' :
+                             job.status === 'เลื่อน' ? 'Not Started' :
+                             job.status === 'ยกเลิก' ? 'Cancelled' : 'On process'}
                           </button>
                         )}
                       </td>
                     </motion.tr>
                   ) : (
-                    <tr key={job.id} className={`job-row ${job.status === 'เสร็จแล้ว' ? 'completed' : ''}`} style={gapStyle}>
+                    <tr 
+                      key={job.id} 
+                      className={`job-row ${job.status === 'เสร็จแล้ว' ? 'completed' : ''} ${job.isOffline ? 'offline-job' : ''}`} 
+                      style={{
+                        ...gapStyle,
+                        backgroundColor: job.isOffline ? '#fff3cd' : 'inherit',
+                        borderLeft: job.isOffline ? '4px solid #ffc107' : 'none'
+                      }}
+                    >
                       <td style={gapStyle}>{index + 1}</td>
-                      <td style={gapStyle} dangerouslySetInnerHTML={{ __html: job.title.replace(/\n/g, '<br/>') }} />
+                      <td style={gapStyle}>
+                        {job.isOffline && <span style={{ color: '#856404', fontSize: '10px' }}>📱 OFFLINE </span>}
+                        <span dangerouslySetInnerHTML={{ __html: job.title.replace(/\n/g, '<br/>') }} />
+                      </td>
                       <td style={gapStyle}>{job.assigned_to || '-'}</td>
                       <td style={gapStyle}>{formatDateToYYMMDD(job.assigned_date)}</td>
                       <td style={gapStyle}>
@@ -1032,12 +1543,13 @@ function App() {
                             const newCompletedDate = newStatus === 'เสร็จแล้ว' ? new Date().toISOString().split('T')[0] : null;
                             handleStatusChange(job.id, newStatus, newCompletedDate);
                           }}
-                          disabled={!user}
-                          className={!user ? 'disabled-select' : ''}
+                          disabled={!currentUser}
+                          className={!currentUser ? 'disabled-select' : ''}
                         >
                           <option value="ดำเนินการอยู่">ดำเนินการ</option>
                           <option value="รออนุมัติ">รออนุมัติ</option>
                           <option value="เลื่อน">เลื่อน</option>
+                          <option value="ยกเลิก">ยกเลิก</option>
                           <option value="เสร็จแล้ว">เสร็จแล้ว</option>
                         </select>
                       </td>
@@ -1047,8 +1559,32 @@ function App() {
                             ลบ
                           </button>
                         ) : (
-                          <button className="button-on-process" disabled={true}>
-                            On process
+                          <button 
+                            disabled={true}
+                            style={{
+                              width: '100%',
+                              boxSizing: 'border-box',
+                              display: 'block',
+                              backgroundColor: 
+                                job.status === 'ดำเนินการอยู่' ? '#007bff' :
+                                job.status === 'รออนุมัติ' ? '#fd7e14' :
+                                job.status === 'เลื่อน' ? '#ffffff' :
+                                job.status === 'ยกเลิก' ? '#dc3545' : '#6c757d',
+                              color: job.status === 'เลื่อน' ? '#000000' : 'white',
+                              border: job.status === 'เลื่อน' ? '1px solid #dee2e6' : 'none',
+                              borderRadius: '8px',
+                              padding: '8px 12px',
+                              cursor: 'pointer',
+                              fontSize: '0.875rem',
+                              fontWeight: '600',
+                              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                            }}
+                          >
+                            {job.status === 'ดำเนินการอยู่' ? 'On process' :
+                             job.status === 'รออนุมัติ' ? 'Pending Approval' :
+                             job.status === 'เลื่อน' ? 'Not Started' :
+                             job.status === 'ยกเลิก' ? 'Cancelled' : 'On process'}
                           </button>
                         )}
                       </td>
@@ -1057,13 +1593,56 @@ function App() {
                 </React.Fragment>
               );
             })}
-            {draggingOverIndex !== null && (
-              <tr style={{ height: 0 }}>
-                <td colSpan={10} style={{ padding: 0 }}>
-                  <div style={{ height: 4, background: '#1976d2', borderRadius: 2, margin: 0, opacity: 0.5, transition: 'opacity 0.2s' }} />
-                </td>
-              </tr>
-            )}
+            
+            {/* Export button as last row */}
+            <tr className="export-row">
+              <td colSpan={9} style={{ 
+                textAlign: 'center', 
+                padding: '15px',
+                background: '#e8f5e8',
+                borderTop: '1px solid #c3e6c3',
+                border: 'none',
+                verticalAlign: 'middle'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
+                  <button 
+                    onClick={handleExport} 
+                    className="export-button"
+                    style={{
+                      background: '#28a745',
+                      border: 'none',
+                      borderRadius: '6px',
+                      color: 'white',
+                      padding: '10px 24px',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                      margin: '0 auto',
+                      textAlign: 'center'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.background = '#218838';
+                      e.target.style.transform = 'translateY(-1px)';
+                      e.target.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.background = '#28a745';
+                      e.target.style.transform = 'translateY(0)';
+                      e.target.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                    }}
+                  >
+                    <span style={{ fontSize: '14px' }}>📊</span>
+                    Export
+                  </button>
+                </div>
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
