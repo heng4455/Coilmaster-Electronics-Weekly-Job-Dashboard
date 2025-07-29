@@ -73,6 +73,12 @@ function App() {
   const [showUserMenu, setShowUserMenu] = useState(false); // สำหรับแสดง user menu modal
   const [showExportDeleteModal, setShowExportDeleteModal] = useState(false); // สำหรับ modal ยืนยันลบหลัง export
   const [exportedJobs, setExportedJobs] = useState([]); // เก็บงานที่ export แล้ว
+  const [translatingJobId, setTranslatingJobId] = useState(null); // สำหรับแสดงสถานะการแปล
+  const [translatedTitles, setTranslatedTitles] = useState({}); // เก็บผลการแปลที่แคชไว้
+  const [translatingRemarkId, setTranslatingRemarkId] = useState(null); // สำหรับแสดงสถานะการแปล remark
+  const [translatedRemarks, setTranslatedRemarks] = useState({}); // เก็บผลการแปล remark ที่แคชไว้
+  const [isKoreanMode, setIsKoreanMode] = useState(false); // สำหรับเปิด/ปิดโหมดภาษาเกาหลี
+  const [translatingAll, setTranslatingAll] = useState(false); // สำหรับแสดงสถานะการแปลทั้งหมด
 
   const jobRefs = useRef({}); // สร้าง ref สำหรับเก็บ DOM element ของแต่ละงาน
 
@@ -409,24 +415,38 @@ function App() {
     }
 
     return (
-      <span
-        onClick={() => handleEditRemark(job.id, job.remark)}
-        dangerouslySetInnerHTML={{ __html: (job.remark || 'Add').replace(/\n/g, '<br/>') }}
-        title="คลิกเพื่อแก้ไขหมายเหตุ"
-        style={{ 
-          cursor: 'pointer',
-          display: 'block',
-          padding: '4px',
-          borderRadius: '4px',
-          transition: 'background-color 0.2s'
-        }}
-        onMouseEnter={(e) => {
-          e.target.style.backgroundColor = '#f0f8ff';
-        }}
-        onMouseLeave={(e) => {
-          e.target.style.backgroundColor = 'transparent';
-        }}
-      />
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ flex: 1 }}>
+          <span
+            onClick={() => handleEditRemark(job.id, job.remark)}
+            dangerouslySetInnerHTML={{ __html: (job.remark || 'Add').replace(/\n/g, '<br/>') }}
+            title="คลิกเพื่อแก้ไขหมายเหตุ"
+            style={{ 
+              cursor: 'pointer',
+              display: 'block',
+              padding: '4px',
+              borderRadius: '4px',
+              transition: 'background-color 0.2s'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.backgroundColor = '#f0f8ff';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.backgroundColor = 'transparent';
+            }}
+          />
+          {isKoreanMode && translatedRemarks[job.id] && (
+            <div style={{ 
+              fontSize: '11px', 
+              color: '#6c757d', 
+              marginTop: '4px',
+              fontStyle: 'italic'
+            }}>
+              🇰🇷 {translatedRemarks[job.id]}
+            </div>
+          )}
+        </div>
+      </div>
     );
   };
 
@@ -984,6 +1004,243 @@ function App() {
     } catch (error) {
       console.error('Error capturing screenshot:', error);
       alert('เกิดข้อผิดพลาดในการแคปภาพ: ' + error.message);
+    }
+  };
+
+  // ฟังก์ชันสำหรับแปลข้อความเป็นภาษาเกาหลี
+  const translateToKorean = async (text, jobId) => {
+    if (!text || !text.trim()) {
+      alert('ไม่มีข้อความให้แปล');
+      return;
+    }
+
+    // ตรวจสอบว่ามีการแปลแล้วหรือไม่
+    if (translatedTitles[jobId]) {
+      alert(`แปลแล้ว: ${translatedTitles[jobId]}`);
+      return;
+    }
+
+    setTranslatingJobId(jobId);
+    
+    try {
+      // ใช้ Google Translate API ฟรีผ่าน MyMemory API
+      const response = await fetch(
+        `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=th|ko`
+      );
+      
+      const data = await response.json();
+      
+      if (data.responseStatus === 200 && data.responseData) {
+        const translatedText = data.responseData.translatedText;
+        
+        // เก็บผลการแปลไว้
+        setTranslatedTitles(prev => ({
+          ...prev,
+          [jobId]: translatedText
+        }));
+        
+        // แสดงผลการแปล
+        alert(`แปลเป็นภาษาเกาหลี:\n\nต้นฉบับ: ${text}\nแปล: ${translatedText}`);
+      } else {
+        throw new Error('ไม่สามารถแปลได้');
+      }
+    } catch (error) {
+      console.error('Translation error:', error);
+      
+      // ถ้า API แรกล้มเหลว ลองใช้ LibreTranslate API
+      try {
+        const response = await fetch('https://libretranslate.de/translate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            q: text,
+            source: 'auto',
+            target: 'ko',
+            format: 'text'
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.translatedText) {
+          const translatedText = data.translatedText;
+          
+          setTranslatedTitles(prev => ({
+            ...prev,
+            [jobId]: translatedText
+          }));
+          
+          alert(`แปลเป็นภาษาเกาหลี:\n\nต้นฉบับ: ${text}\nแปล: ${translatedText}`);
+        } else {
+          throw new Error('ไม่สามารถแปลได้');
+        }
+      } catch (secondError) {
+        console.error('Second translation API error:', secondError);
+        alert('เกิดข้อผิดพลาดในการแปล กรุณาลองใหม่อีกครั้ง');
+      }
+    } finally {
+      setTranslatingJobId(null);
+    }
+  };
+
+  // ฟังก์ชันสำหรับแสดงการแปลที่บันทึกไว้
+  const showTranslation = (jobId) => {
+    if (translatedTitles[jobId]) {
+      const job = jobs.find(j => j.id === jobId);
+      alert(`แปลภาษาเกาหลี:\n\nต้นฉบับ: ${job.title}\nแปล: ${translatedTitles[jobId]}`);
+    }
+  };
+
+  // ฟังก์ชันสำหรับแปล remark เป็นภาษาเกาหลี
+  const translateRemarkToKorean = async (text, jobId) => {
+    if (!text || !text.trim()) {
+      alert('ไม่มีหมายเหตุให้แปล');
+      return;
+    }
+
+    // ตรวจสอบว่ามีการแปลแล้วหรือไม่
+    if (translatedRemarks[jobId]) {
+      alert(`แปลแล้ว: ${translatedRemarks[jobId]}`);
+      return;
+    }
+
+    setTranslatingRemarkId(jobId);
+    
+    try {
+      // ใช้ Google Translate API ฟรีผ่าน MyMemory API
+      const response = await fetch(
+        `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=th|ko`
+      );
+      
+      const data = await response.json();
+      
+      if (data.responseStatus === 200 && data.responseData) {
+        const translatedText = data.responseData.translatedText;
+        setTranslatedRemarks(prev => ({
+          ...prev,
+          [jobId]: translatedText
+        }));
+        alert(`แปลหมายเหตุสำเร็จ!\n\nต้นฉบับ: ${text}\nแปล: ${translatedText}`);
+      } else {
+        throw new Error('การแปลล้มเหลว');
+      }
+    } catch (error) {
+      console.error('Translation error:', error);
+      
+      // ถ้า API แรกล้มเหลว ลองใช้ LibreTranslate API
+      try {
+        const fallbackResponse = await fetch('https://libretranslate.de/translate', {
+          method: 'POST',
+          body: JSON.stringify({
+            q: text,
+            source: 'th',
+            target: 'ko',
+            format: 'text'
+          }),
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const fallbackData = await fallbackResponse.json();
+        
+        if (fallbackData.translatedText) {
+          setTranslatedRemarks(prev => ({
+            ...prev,
+            [jobId]: fallbackData.translatedText
+          }));
+          alert(`แปลหมายเหตุสำเร็จ!\n\nต้นฉบับ: ${text}\nแปล: ${fallbackData.translatedText}`);
+        } else {
+          throw new Error('ทั้งสอง API ล้มเหลว');
+        }
+      } catch (secondError) {
+        console.error('Fallback translation error:', secondError);
+        alert('ไม่สามารถแปลหมายเหตุได้ กรุณาลองใหม่อีกครั้ง');
+      }
+    } finally {
+      setTranslatingRemarkId(null);
+    }
+  };
+
+  // ฟังก์ชันสำหรับแสดงการแปล remark ที่บันทึกไว้
+  const showRemarkTranslation = (jobId) => {
+    if (translatedRemarks[jobId]) {
+      const job = jobs.find(j => j.id === jobId);
+      alert(`แปลหมายเหตุภาษาเกาหลี:\n\nต้นฉบับ: ${job.remark}\nแปล: ${translatedRemarks[jobId]}`);
+    }
+  };
+
+  // ฟังก์ชันสำหรับเปิด/ปิดโหมดภาษาเกาหลี และแปลทั้งหมดพร้อมกัน
+  const toggleKoreanMode = async () => {
+    if (!isKoreanMode) {
+      // กำลังจะเปิดโหมดเกาหลี - แปลทั้งหมด
+      setTranslatingAll(true);
+      
+      try {
+        const jobsToTranslate = jobs.filter(job => 
+          job.title && job.title.trim() && !translatedTitles[job.id]
+        );
+        
+        const remarksToTranslate = jobs.filter(job => 
+          job.remark && job.remark.trim() && job.remark !== 'Add' && !translatedRemarks[job.id]
+        );
+
+        // แปล Job Titles
+        for (const job of jobsToTranslate) {
+          try {
+            const response = await fetch(
+              `https://api.mymemory.translated.net/get?q=${encodeURIComponent(job.title)}&langpair=th|ko`
+            );
+            const data = await response.json();
+            
+            if (data.responseStatus === 200 && data.responseData) {
+              setTranslatedTitles(prev => ({
+                ...prev,
+                [job.id]: data.responseData.translatedText
+              }));
+            }
+          } catch (error) {
+            console.error(`Error translating title for job ${job.id}:`, error);
+          }
+          
+          // หน่วงเวลาเล็กน้อยเพื่อไม่ให้ API rate limit
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+
+        // แปล Remarks
+        for (const job of remarksToTranslate) {
+          try {
+            const response = await fetch(
+              `https://api.mymemory.translated.net/get?q=${encodeURIComponent(job.remark)}&langpair=th|ko`
+            );
+            const data = await response.json();
+            
+            if (data.responseStatus === 200 && data.responseData) {
+              setTranslatedRemarks(prev => ({
+                ...prev,
+                [job.id]: data.responseData.translatedText
+              }));
+            }
+          } catch (error) {
+            console.error(`Error translating remark for job ${job.id}:`, error);
+          }
+          
+          // หน่วงเวลาเล็กน้อยเพื่อไม่ให้ API rate limit
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+
+        setIsKoreanMode(true);
+        alert(`แปลเสร็จแล้ว!\nJob Titles: ${jobsToTranslate.length} รายการ\nRemarks: ${remarksToTranslate.length} รายการ`);
+        
+      } catch (error) {
+        console.error('Error during bulk translation:', error);
+        alert('เกิดข้อผิดพลาดในการแปล กรุณาลองใหม่อีกครั้ง');
+      } finally {
+        setTranslatingAll(false);
+      }
+    } else {
+      // ปิดโหมดเกาหลี
+      setIsKoreanMode(false);
     }
   };
 
@@ -1609,37 +1866,75 @@ function App() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
         <h1 style={{ margin: '0' }}>Coilmaster Electronics - Weekly Job Dashboard</h1>
-        <button 
-          onClick={handleCapture}
-          style={{
-            background: '#6c757d',
-            border: 'none',
-            borderRadius: '6px',
-            color: 'white',
-            padding: '8px 16px',
-            fontSize: '13px',
-            fontWeight: '600',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-          }}
-          onMouseEnter={(e) => {
-            e.target.style.background = '#545b62';
-            e.target.style.transform = 'translateY(-1px)';
-            e.target.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
-          }}
-          onMouseLeave={(e) => {
-            e.target.style.background = '#6c757d';
-            e.target.style.transform = 'translateY(0)';
-            e.target.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
-          }}
-          title="แคปภาพตาราง"
-        >
-          Capture
-        </button>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <button 
+            onClick={toggleKoreanMode}
+            disabled={translatingAll}
+            style={{
+              background: isKoreanMode ? '#dc3545' : '#007bff',
+              border: 'none',
+              borderRadius: '6px',
+              color: 'white',
+              padding: '8px 16px',
+              fontSize: '13px',
+              fontWeight: '600',
+              cursor: translatingAll ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+              opacity: translatingAll ? 0.6 : 1
+            }}
+            onMouseEnter={(e) => {
+              if (!translatingAll) {
+                e.target.style.background = isKoreanMode ? '#c82333' : '#0056b3';
+                e.target.style.transform = 'translateY(-1px)';
+                e.target.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = isKoreanMode ? '#dc3545' : '#007bff';
+              e.target.style.transform = 'translateY(0)';
+              e.target.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+            }}
+            title={isKoreanMode ? "ปิดโหมดภาษาเกาหลี" : "เปิดโหมดภาษาเกาหลี - แปลทั้งหมด"}
+          >
+            {translatingAll ? '⏳' : (isKoreanMode ? '🇹🇭' : '🇰🇷')}
+            {translatingAll ? ' กำลังแปล...' : (isKoreanMode ? ' Thai' : ' Korean')}
+          </button>
+          <button 
+            onClick={handleCapture}
+            style={{
+              background: '#6c757d',
+              border: 'none',
+              borderRadius: '6px',
+              color: 'white',
+              padding: '8px 16px',
+              fontSize: '13px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = '#545b62';
+              e.target.style.transform = 'translateY(-1px)';
+              e.target.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = '#6c757d';
+              e.target.style.transform = 'translateY(0)';
+              e.target.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+            }}
+            title="แคปภาพตาราง"
+          >
+            Capture
+          </button>
+        </div>
       </div>
       
       {/* แสดงส่วนเพิ่มงานเฉพาะเมื่อล็อกอินแล้ว */}
@@ -1769,8 +2064,22 @@ function App() {
                     >
                       <td style={gapStyle}>{index + 1}</td>
                       <td style={gapStyle}>
-                        {job.isOffline && <span style={{ color: '#856404', fontSize: '10px' }}>📱 OFFLINE </span>}
-                        <span dangerouslySetInnerHTML={{ __html: job.title.replace(/\n/g, '<br/>') }} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ flex: 1 }}>
+                            {job.isOffline && <span style={{ color: '#856404', fontSize: '10px' }}>📱 OFFLINE </span>}
+                            <span dangerouslySetInnerHTML={{ __html: job.title.replace(/\n/g, '<br/>') }} />
+                            {isKoreanMode && translatedTitles[job.id] && (
+                              <div style={{ 
+                                fontSize: '11px', 
+                                color: '#6c757d', 
+                                marginTop: '4px',
+                                fontStyle: 'italic'
+                              }}>
+                                🇰🇷 {translatedTitles[job.id]}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </td>
                       <td style={gapStyle}>{job.assigned_to || '-'}</td>
                       <td style={gapStyle}>{formatDateToYYMMDD(job.assigned_date)}</td>
@@ -1841,8 +2150,22 @@ function App() {
                     >
                       <td style={gapStyle}>{index + 1}</td>
                       <td style={gapStyle}>
-                        {job.isOffline && <span style={{ color: '#856404', fontSize: '10px' }}>📱 OFFLINE </span>}
-                        <span dangerouslySetInnerHTML={{ __html: job.title.replace(/\n/g, '<br/>') }} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ flex: 1 }}>
+                            {job.isOffline && <span style={{ color: '#856404', fontSize: '10px' }}>📱 OFFLINE </span>}
+                            <span dangerouslySetInnerHTML={{ __html: job.title.replace(/\n/g, '<br/>') }} />
+                            {isKoreanMode && translatedTitles[job.id] && (
+                              <div style={{ 
+                                fontSize: '11px', 
+                                color: '#6c757d', 
+                                marginTop: '4px',
+                                fontStyle: 'italic'
+                              }}>
+                                🇰🇷 {translatedTitles[job.id]}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </td>
                       <td style={gapStyle}>{job.assigned_to || '-'}</td>
                       <td style={gapStyle}>{formatDateToYYMMDD(job.assigned_date)}</td>
