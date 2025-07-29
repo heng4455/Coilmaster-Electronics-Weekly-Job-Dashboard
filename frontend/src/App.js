@@ -920,23 +920,9 @@ function App() {
     setLoading(false);
 
     if (!error) {
-      // หลังจากบันทึก Remark สำเร็จ ให้ดึงงานทั้งหมดมาใหม่แล้วจัดเรียง
-      const { data: jobsData, error: jobsError } = await supabase.from('jobs')
-        .select('*, due_date_history')
-        .order('order', { ascending: true })
-        .order('due_date', { ascending: true }); // ดึงมาตาม created_at ก่อน แล้วค่อยมาเรียง client-side
-      if (!jobsError) {
-        setJobs(sortJobs(jobsData || [])); // ใช้ sortJobs ตรงนี้
-        // อัปเดต oldDueDates state หลังจากบันทึก Remark
-        const oldDueDatesObj = {};
-        (jobsData || []).forEach(job => {
-          oldDueDatesObj[job.id] = Array.isArray(job.due_date_history) ? job.due_date_history : [];
-        });
-        setOldDueDates(oldDueDatesObj);
-      } else {
-        alert('เกิดข้อผิดพลาดในการโหลดงานใหม่หลังจากบันทึก Remark: ' + jobsError.message);
-        console.error('Error fetching jobs after remark update:', jobsError);
-      }
+      // อัปเดตเฉพาะใน local state แทนการดึงข้อมูลทั้งหมดจาก Supabase
+      const updatedJobs = jobs.map(j => j.id === jobId ? { ...j, remark: newRemarkContent } : j);
+      setJobs(updatedJobs);
       setEditingRemarkId(null);
       setNewRemark('');
     } else {
