@@ -66,12 +66,11 @@ table {
   border-spacing: 0;
   table-layout: fixed; /* เพิ่มบรรทัดนี้ */
   margin-bottom: 32px;
-  background: #f9fafb;
   border-radius: 8px;
   overflow: hidden;
 }
 thead {
-  background: #e3f2fd;
+  background: #6C757D;
 }
 th,
 td {
@@ -84,33 +83,28 @@ td {
 /* กำหนดความกว้างของแต่ละคอลัมน์ */
 
 th {
-  color: #1976d2;
+  color: #FFFFFF;
   font-weight: 600;
-  background: #bbdefb;
+  background: #6C757D;
 }
 td {
-  color: #333;
+  color: #212529;
   transition: background-color 0.2s ease-in-out;
-}
-
-/* Individual cell hover effects */
-.job-table-animated tbody tr:hover td {
-  background-color: transparent;
 }
 
 /* Status cell hover effect */
 .job-table-animated tbody tr:hover td:nth-child(8) {
-  background-color: rgba(25, 118, 210, 0.05);
+  background-color: rgba(233, 236, 239, 0.5);
 }
 
 /* Action cell hover effect */
 .job-table-animated tbody tr:hover td:nth-child(9) {
-  background-color: rgba(25, 118, 210, 0.05);
+  background-color: rgba(233, 236, 239, 0.5);
 }
 
 /* Remark cell hover effect */
 .job-table-animated tbody tr:hover td:nth-child(7) {
-  background-color: rgba(25, 118, 210, 0.05);
+  background-color: rgba(233, 236, 239, 0.5);
 }
 
 /* Remark cell styles */
@@ -120,7 +114,7 @@ td {
 }
 
 .job-table-animated tbody td:nth-child(7):hover {
-  background-color: rgba(25, 118, 210, 0.1) !important;
+  background-color: rgba(233, 236, 239, 0.7) !important;
 }
 
 /* Remark textarea styles */
@@ -143,7 +137,7 @@ td {
 
 /* Due date cell hover effect */
 .job-table-animated tbody tr:hover td:nth-child(5) {
-  background-color: rgba(25, 118, 210, 0.05);
+  background-color: rgba(233, 236, 239, 0.5);
 }
 
 /* Due date history styles */
@@ -202,18 +196,38 @@ tr:last-child td:first-child {
 tr:last-child td:last-child {
   border-bottom-right-radius: 8px;
 }
-tr:nth-child(even) {
-  background: #f1f8ff;
-}
-tr:nth-child(odd) {
-  background: #fff;
+/* สลับสีแถวให้ชัดเจน - ใช้โทนสีเทา */
+.job-table tbody tr:nth-child(even),
+.job-table-animated tbody tr:nth-child(even),
+tbody tr:nth-child(even) {
+  background-color: #F2F2F2 !important;
 }
 
-/* Hover effect for table rows */
+.job-table tbody tr:nth-child(odd),
+.job-table-animated tbody tr:nth-child(odd),
+tbody tr:nth-child(odd) {
+  background-color: #FFFFFF !important;
+}
+
+/* สีพิเศษสำหรับงานที่เสร็จแล้ว */
+.job-row.completed {
+  background-color: #e8f5e8 !important;
+  border-left: 4px solid #4caf50;
+}
+
+/* Override สำหรับงานที่เสร็จแล้วในแถวคู่/คี่ */
+tbody tr.completed:nth-child(even) {
+  background: #e8f5e8 !important;
+}
+tbody tr.completed:nth-child(odd) {
+  background: #e8f5e8 !important;
+}
+
+/* Hover effect for table rows - ปรับให้เข้ากับโทนสีเทา */
 .job-table-animated tbody tr:hover {
-  background-color: #e3f2fd !important;
+  background-color: #E9ECEF !important;
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.15);
+  box-shadow: 0 2px 8px rgba(108, 117, 125, 0.15);
   transition: all 0.2s ease-in-out;
   cursor: pointer;
 }
@@ -355,10 +369,17 @@ td select {
   margin: 0 4px;
 }
 .modal-error {
-  color: #d32f2f;
+  color: #e74c3c;
+  font-size: 14px;
+  margin-top: 10px;
   text-align: center;
-  margin-top: 6px;
-  font-size: 0.98rem;
+}
+
+.modal-success {
+  color: #27ae60;
+  font-size: 14px;
+  margin-top: 10px;
+  text-align: center;
 }
 .modal-success {
   color: #388e3c;
@@ -414,11 +435,6 @@ td select {
   transition: all 0.3s ease-in-out;
 }
 
-.job-row.completed {
-  background-color: #e8f5e8 !important;
-  border-left: 4px solid #4caf50;
-}
-
 /* Smooth transition for job reordering */
 .job-table-animated tbody tr {
   transition: all 0.3s ease-in-out;
@@ -452,7 +468,7 @@ td select {
 }
 
 .due-date-editable:hover {
-  background-color: #f0f8ff !important;
+  background-color: #F2F2F2 !important;
 }
 
 .due-date-editable input[type="date"] {
@@ -598,4 +614,57 @@ th:nth-child(9), td:nth-child(9) { width: 7%; }
   .modal {
     margin: 15px;
   }
+}
+
+/* People selection checkboxes styling */
+.people-selection {
+  background: #f8f9fa;
+  transition: border-color 0.2s;
+}
+
+.people-selection:hover {
+  border-color: #1976d2 !important;
+}
+
+.people-selection label {
+  transition: background-color 0.2s;
+  border-radius: 4px;
+}
+
+.people-selection label:hover {
+  background-color: #e3f2fd;
+}
+
+.people-selection input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #1976d2;
+}
+
+.people-selection input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Subtle Export Button Row Styling */
+.export-row {
+  background: #f8f9fa !important;
+}
+
+.export-row td {
+  border: none !important;
+  background: transparent !important;
+}
+
+.subtle-export-button {
+  position: relative;
+  transition: all 0.2s ease !important;
+}
+
+.subtle-export-button:hover {
+  transform: translateY(-1px);
+}
+
+.subtle-export-button:active {
+  transform: translateY(0) !important;
 }
