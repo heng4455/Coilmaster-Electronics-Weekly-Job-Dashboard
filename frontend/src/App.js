@@ -369,7 +369,16 @@ function App() {
           rows="3"
           value={newRemark}
           onChange={(e) => setNewRemark(e.target.value)}
-          onBlur={() => handleSaveRemark(job.id, newRemark)}
+          onBlur={() => {
+            // บันทึกเฉพาะเมื่อมีการเปลี่ยนแปลง
+            if (newRemark !== (job.remark || '')) {
+              handleSaveRemark(job.id, newRemark);
+            } else {
+              // ถ้าไม่มีการเปลี่ยนแปลง แค่ออกจากโหมดแก้ไข
+              setEditingRemarkId(null);
+              setNewRemark('');
+            }
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && e.ctrlKey) {
               handleSaveRemark(job.id, newRemark);
@@ -899,35 +908,33 @@ function App() {
   };
 
   const handleSaveRemark = async (jobId, newRemarkContent) => {
-    setLoading(true);
+    // ออกจากโหมดแก้ไขก่อนเพื่อไม่ให้ re-render ขณะพิมพ์
+    setEditingRemarkId(null);
+    setNewRemark('');
     
-    // ถ้าไม่ล็อกอิน ให้อัปเดตเฉพาะใน local state
+    // อัปเดต local state ทันที
+    const updatedJobs = jobs.map(j => j.id === jobId ? { ...j, remark: newRemarkContent } : j);
+    setJobs(updatedJobs);
+    
+    // ถ้าไม่ล็อกอิน ก็จบแค่นี้
     if (!currentUser) {
-      const updatedJobs = jobs.map(j => j.id === jobId ? { ...j, remark: newRemarkContent } : j);
-      setJobs(updatedJobs);
-      setEditingRemarkId(null);
-      setNewRemark('');
-      setLoading(false);
       return;
     }
     
-    // ถ้าล็อกอินแล้ว ให้บันทึกลง Supabase
-    const { data: updatedJob, error } = await supabase
-      .from('jobs')
-      .update({ remark: newRemarkContent })
-      .eq('id', jobId)
-      .select();
-    setLoading(false);
+    // ถ้าล็อกอินแล้ว ให้บันทึกลง Supabase โดยไม่แสดง loading
+    try {
+      const { error } = await supabase
+        .from('jobs')
+        .update({ remark: newRemarkContent })
+        .eq('id', jobId);
 
-    if (!error) {
-      // อัปเดตเฉพาะใน local state แทนการดึงข้อมูลทั้งหมดจาก Supabase
-      const updatedJobs = jobs.map(j => j.id === jobId ? { ...j, remark: newRemarkContent } : j);
-      setJobs(updatedJobs);
-      setEditingRemarkId(null);
-      setNewRemark('');
-    } else {
-      alert('เกิดข้อผิดพลาดในการบันทึก Remark: ' + error.message);
-      console.error('Error saving remark:', error);
+      if (error) {
+        console.error('Error saving remark:', error);
+        // ถ้า save ไม่สำเร็จ แสดง error แต่ไม่ต้อง revert เพราะ user อาจจะลองใหม่
+        // อาจจะเพิ่ม toast notification ในอนาคต
+      }
+    } catch (err) {
+      console.error('Unexpected error saving remark:', err);
     }
   };
 
