@@ -1609,7 +1609,7 @@ function App() {
       )}
 
       <div style={{ overflowX: 'auto' }}>
-        <table className="job-table job-table-animated" key={`job-table-${jobs.length}-${Date.now()}`}>
+        <table className="job-table job-table-animated" key={`job-table-${jobs.length}`}>
           <colgroup>
             <col style={{ width: '5%' }} />{/* ลำดับ */}
             <col style={{ width: '22%' }} />{/* เนื้อหางาน - ปรับลด */}
