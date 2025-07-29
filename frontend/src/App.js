@@ -168,17 +168,38 @@ function App() {
   // ฟังก์ชันล็อกเอาท์
   const handleLogout = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('Logout error:', error);
+      // ตรวจสอบ session ก่อนทำการ logout
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        const { error } = await supabase.auth.signOut();
+        if (error && error.message !== 'Auth session missing!') {
+          console.error('Logout error:', error);
+          // แสดง error เฉพาะกรณีที่ไม่ใช่ session missing
+          alert('เกิดข้อผิดพลาดในการออกจากระบบ: ' + error.message);
+        }
       }
       
+      // ล้าง state เสมอ ไม่ว่าจะ signOut สำเร็จหรือไม่
       setIsLoggedIn(false);
       setCurrentUser(null);
       setProfiles([]);
-      console.log('Logout successful');
+      console.log('Logout successful - cleared local state');
+      
     } catch (error) {
       console.error('Logout error:', error);
+      
+      // ล้าง state แม้จะเกิด error เพื่อไม่ให้ user ติดค้างในระบบ
+      setIsLoggedIn(false);
+      setCurrentUser(null);
+      setProfiles([]);
+      
+      // แสดง error เฉพาะกรณีที่ไม่ใช่ AuthSessionMissingError
+      if (!error.message.includes('Auth session missing')) {
+        alert('เกิดข้อผิดพลาดในการออกจากระบบ: ' + error.message);
+      }
+      
+      console.log('Logout completed with error handling - cleared local state');
     }
   };
 
