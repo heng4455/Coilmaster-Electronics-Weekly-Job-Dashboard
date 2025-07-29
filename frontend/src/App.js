@@ -10,6 +10,36 @@ import { motion } from 'framer-motion';
 
 // import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'; // ลบบรรทัดนี้ออก
 
+// Component สำหรับแก้ไข remark แยกออกมาเพื่อ isolate state
+const RemarkEditor = ({ initialValue, onSave, onCancel }) => {
+  const [value, setValue] = useState(initialValue);
+  
+  return (
+    <textarea
+      rows="3"
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => {
+        if (value !== initialValue) {
+          onSave(value);
+        } else {
+          onCancel();
+        }
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && e.ctrlKey) {
+          onSave(value);
+        } else if (e.key === 'Escape') {
+          onCancel();
+        }
+      }}
+      autoFocus
+      style={{ width: '100%', minHeight: '60px', boxSizing: 'border-box' }}
+      placeholder="พิมพ์หมายเหตุที่นี่..."
+    />
+  );
+};
+
 function App() {
   const [jobs, setJobs] = useState([]);
   const [profiles, setProfiles] = useState([]);
@@ -365,31 +395,13 @@ function App() {
   const renderRemarkCell = (job, gapStyle) => {
     if (editingRemarkId === job.id) {
       return (
-        <textarea
-          rows="3"
-          value={newRemark}
-          onChange={(e) => setNewRemark(e.target.value)}
-          onBlur={() => {
-            // บันทึกเฉพาะเมื่อมีการเปลี่ยนแปลง
-            if (newRemark !== (job.remark || '')) {
-              handleSaveRemark(job.id, newRemark);
-            } else {
-              // ถ้าไม่มีการเปลี่ยนแปลง แค่ออกจากโหมดแก้ไข
-              setEditingRemarkId(null);
-              setNewRemark('');
-            }
+        <RemarkEditor
+          initialValue={job.remark || ''}
+          onSave={(value) => handleSaveRemark(job.id, value)}
+          onCancel={() => {
+            setEditingRemarkId(null);
+            setNewRemark('');
           }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && e.ctrlKey) {
-              handleSaveRemark(job.id, newRemark);
-            } else if (e.key === 'Escape') {
-              setEditingRemarkId(null);
-              setNewRemark('');
-            }
-          }}
-          autoFocus
-          style={{ width: '100%', minHeight: '60px', boxSizing: 'border-box' }}
-          placeholder="พิมพ์หมายเหตุที่นี่..."
         />
       );
     }
