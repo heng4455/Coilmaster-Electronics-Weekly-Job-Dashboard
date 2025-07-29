@@ -264,7 +264,27 @@ function App() {
     if (!loading) {
       loadData();
     }
-  }, [loading, isLoggedIn]); // เพิ่ม isLoggedIn เป็น dependency
+  }, [loading]); // ลบ isLoggedIn ออกจาก dependency เพื่อป้องกันการ reload ไม่จำเป็น
+
+  // โหลด profiles เมื่อมีการ login/logout
+  useEffect(() => {
+    const loadProfiles = async () => {
+      if (isLoggedIn) {
+        const { data: profilesData, error: profilesError } = await supabase
+          .from('profiles')
+          .select('*');
+        
+        if (!profilesError) {
+          setProfiles(profilesData || []);
+          console.log('Profiles loaded after login:', profilesData?.length || 0);
+        }
+      } else {
+        setProfiles([]); // ล้าง profiles เมื่อ logout
+      }
+    };
+    
+    loadProfiles();
+  }, [isLoggedIn]);
 
   const loadData = async () => {
     try {
@@ -291,20 +311,6 @@ function App() {
         setOldDueDates(oldDueDatesObj);
         
         console.log('Jobs loaded:', jobsData?.length || 0);
-      }
-      
-      // โหลด profiles ถ้าล็อกอินแล้ว
-      if (isLoggedIn) {
-        const { data: profilesData, error: profilesError } = await supabase
-          .from('profiles')
-          .select('*');
-        
-        if (profilesError) {
-          console.error('Profiles error:', profilesError);
-        } else {
-          setProfiles(profilesData || []);
-          console.log('Profiles loaded:', profilesData?.length || 0);
-        }
       }
       
       setErrorMsg('');
