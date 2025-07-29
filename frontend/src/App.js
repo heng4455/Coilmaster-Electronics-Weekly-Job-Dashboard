@@ -71,6 +71,8 @@ function App() {
   const [signupSuccess, setSignupSuccess] = useState('');
   const [isSignupMode, setIsSignupMode] = useState(false); // สำหรับสลับโหมดใน modal เดียวกัน
   const [showUserMenu, setShowUserMenu] = useState(false); // สำหรับแสดง user menu modal
+  const [showExportDeleteModal, setShowExportDeleteModal] = useState(false); // สำหรับ modal ยืนยันลบหลัง export
+  const [exportedJobs, setExportedJobs] = useState([]); // เก็บงานที่ export แล้ว
 
   const jobRefs = useRef({}); // สร้าง ref สำหรับเก็บ DOM element ของแต่ละงาน
 
@@ -985,6 +987,31 @@ function App() {
     }
   };
 
+  // ฟังก์ชันสำหรับยืนยันการลบงานที่ export แล้ว
+  const confirmDeleteExportedJobs = async () => {
+    if (exportedJobs.length > 0) {
+      const completedIds = exportedJobs.map(job => job.id);
+      const { error } = await supabase.from('jobs').delete().in('id', completedIds);
+      if (!error) {
+        // อัปเดต state jobs ในหน้าเว็บ
+        const remainingJobs = jobs.filter(job => job.status !== 'เสร็จแล้ว');
+        setJobs(sortJobs(remainingJobs));
+        alert('ลบงานที่เสร็จแล้วเรียบร้อย!');
+      } else {
+        alert('เกิดข้อผิดพลาดในการลบงานที่เสร็จแล้ว: ' + error.message);
+      }
+    }
+    // ปิด modal
+    setShowExportDeleteModal(false);
+    setExportedJobs([]);
+  };
+
+  // ฟังก์ชันสำหรับยกเลิกการลบ
+  const cancelDeleteExportedJobs = () => {
+    setShowExportDeleteModal(false);
+    setExportedJobs([]);
+  };
+
   const handleExport = async () => {
     // กรองเฉพาะงานที่สถานะ "เสร็จแล้ว"
     const completedJobs = jobs.filter(job => job.status === 'เสร็จแล้ว');
@@ -1022,22 +1049,9 @@ function App() {
       return;
     }
 
-    // Popup ถามว่าต้องการลบงานที่เสร็จแล้วหรือไม่ (เฉพาะผู้ที่ล็อกอินแล้ว)
-    if (window.confirm('ต้องการลบงานที่เสร็จแล้วหรือไม่?')) {
-      // ลบงานที่เสร็จแล้วทั้งหมด
-      const completedIds = completedJobs.map(job => job.id);
-      if (completedIds.length > 0) {
-        const { error } = await supabase.from('jobs').delete().in('id', completedIds);
-        if (!error) {
-          // อัปเดต state jobs ในหน้าเว็บ
-          const remainingJobs = jobs.filter(job => job.status !== 'เสร็จแล้ว');
-          setJobs(sortJobs(remainingJobs));
-          alert('ลบงานที่เสร็จแล้วเรียบร้อย!');
-        } else {
-          alert('เกิดข้อผิดพลาดในการลบงานที่เสร็จแล้ว: ' + error.message);
-        }
-      }
-    }
+    // เก็บงานที่ export แล้วและแสดง modal ยืนยัน
+    setExportedJobs(completedJobs);
+    setShowExportDeleteModal(true);
   };
 
   // ฟังก์ชันสำหรับผู้ดูแลระบบ - ล้างงานที่ถูก soft delete
@@ -1202,7 +1216,39 @@ function App() {
       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 10, gap: '8px' }}>
         {isLoggedIn ? (
           <>
-            <span style={{ marginRight: 8 }}>{getDisplayName()}</span>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '8px',
+              background: '#f8f9fa',
+              padding: '6px 12px',
+              borderRadius: '20px',
+              border: '1px solid #dee2e6'
+            }}>
+              <div style={{
+                width: '24px',
+                height: '24px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #007bff, #0056b3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'white',
+                fontSize: '14px',
+                fontWeight: 'bold'
+              }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="white">
+                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
+              </div>
+              <span style={{ 
+                fontSize: '14px',
+                fontWeight: '500',
+                color: '#495057'
+              }}>
+                {getDisplayName()}
+              </span>
+            </div>
             <button 
               onClick={() => setShowUserMenu(true)}
               style={{ 
@@ -1501,6 +1547,66 @@ function App() {
         </div>
       )}
       
+      {/* Modal สำหรับยืนยันการลบงานที่ export แล้ว */}
+      {showExportDeleteModal && (
+        <div className="modal-backdrop">
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <button className="modal-close" onClick={cancelDeleteExportedJobs}>×</button>
+            <div style={{ padding: '20px', textAlign: 'center' }}>
+              <h2 style={{ marginBottom: '20px', color: '#dc3545' }}>ยืนยันการลบงาน</h2>
+              <div style={{ 
+                background: '#fff3cd', 
+                border: '1px solid #ffeaa7', 
+                borderRadius: '8px',
+                padding: '15px',
+                marginBottom: '20px'
+              }}>
+                <p style={{ margin: '0', fontSize: '16px', color: '#856404' }}>
+                  ต้องการลบงานที่เสร็จแล้วทั้งหมด <strong>{exportedJobs.length} งาน</strong> หรือไม่?
+                </p>
+                <p style={{ margin: '8px 0 0 0', fontSize: '14px', color: '#856404' }}>
+                  การกระทำนี้ไม่สามารถย้อนกลับได้
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                <button 
+                  onClick={confirmDeleteExportedJobs}
+                  style={{
+                    background: '#dc3545',
+                    color: 'white',
+                    border: 'none',
+                    padding: '10px 20px',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    fontWeight: '500',
+                    minWidth: '100px'
+                  }}
+                >
+                  🗑️ ลบงาน
+                </button>
+                <button 
+                  onClick={cancelDeleteExportedJobs}
+                  style={{
+                    background: '#6c757d',
+                    color: 'white',
+                    border: 'none',
+                    padding: '10px 20px',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    fontWeight: '500',
+                    minWidth: '100px'
+                  }}
+                >
+                  ❌ ยกเลิก
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
         <h1 style={{ margin: '0' }}>Coilmaster Electronics - Weekly Job Dashboard</h1>
         <button 
