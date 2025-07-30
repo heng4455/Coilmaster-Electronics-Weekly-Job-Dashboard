@@ -79,6 +79,11 @@ function App() {
   const [translatedRemarks, setTranslatedRemarks] = useState({}); // เก็บผลการแปล remark ที่แคชไว้
   const [isKoreanMode, setIsKoreanMode] = useState(false); // สำหรับเปิด/ปิดโหมดภาษาเกาหลี
   const [translatingAll, setTranslatingAll] = useState(false); // สำหรับแสดงสถานะการแปลทั้งหมด
+  const [showTranslationCompleteModal, setShowTranslationCompleteModal] = useState(false); // สำหรับ modal แจ้งการแปลเสร็จ
+  const [translationResults, setTranslationResults] = useState({ jobTitles: 0, remarks: 0 }); // ผลการแปล
+  const [showDeleteModal, setShowDeleteModal] = useState(false); // สำหรับ modal ยืนยันการลบงาน
+  const [jobToDelete, setJobToDelete] = useState(null); // เก็บงานที่จะลบ
+  const [successMsg, setSuccessMsg] = useState(''); // ข้อความแสดงความสำเร็จ
 
   const jobRefs = useRef({}); // สร้าง ref สำหรับเก็บ DOM element ของแต่ละงาน
 
@@ -627,30 +632,32 @@ function App() {
     
     if (!currentUser) {
       console.log('❌ No user logged in');
-      alert('กรุณาเข้าสู่ระบบเพื่อลบงาน');
+      setErrorMsg('กรุณาเข้าสู่ระบบเพื่อลบงาน');
       return;
     }
 
     // หาข้อมูลงานที่จะลบ
-    const jobToDelete = jobs.find(job => job.id === id);
-    if (!jobToDelete) {
-      alert('ไม่พบงานที่ต้องการลบ');
+    const job = jobs.find(job => job.id === id);
+    if (!job) {
+      setErrorMsg('ไม่พบงานที่ต้องการลบ');
       return;
     }
 
-    console.log('🔴 Job status:', jobToDelete.status);
+    // แสดง modal ยืนยันการลบ
+    setJobToDelete(job);
+    setShowDeleteModal(true);
+  };
 
-    // ยืนยันการลบ
-    const isCompleted = jobToDelete.status === 'เสร็จสิ้น';
-    const confirmMessage = isCompleted 
-      ? 'ต้องการลบงานที่เสร็จสิ้นแล้วออกจากระบบถาวรหรือไม่?' 
-      : 'ต้องการลบงานนี้หรือไม่?';
-    
-    const confirmDelete = window.confirm(confirmMessage);
-    console.log('🔴 User confirmed delete:', confirmDelete);
-    if (!confirmDelete) {
-      return;
-    }
+  // ฟังก์ชันยืนยันการลบงาน
+  const confirmDeleteJob = async () => {
+    if (!jobToDelete) return;
+
+    const id = jobToDelete.id;
+    const isCompleted = jobToDelete.status === 'เสร็จแล้ว';
+
+    // ปิด modal ก่อน
+    setShowDeleteModal(false);
+    setJobToDelete(null);
 
     try {
       console.log('🔴 พยายามลบงาน id:', id);
@@ -673,7 +680,7 @@ function App() {
         
         if (hardDeleteResponse.error) {
           console.error('❌ Hard delete failed:', hardDeleteResponse.error);
-          alert('ไม่สามารถลบงานได้: ' + hardDeleteResponse.error.message);
+          setErrorMsg('ไม่สามารถลบงานได้: ' + hardDeleteResponse.error.message);
           return;
         }
         
@@ -694,7 +701,7 @@ function App() {
         
         if (softDeleteResponse.error) {
           console.error('❌ Soft delete failed:', softDeleteResponse.error);
-          alert('ไม่สามารถลบงานได้: ' + softDeleteResponse.error.message);
+          setErrorMsg('ไม่สามารถลบงานได้: ' + softDeleteResponse.error.message);
           return;
         }
         
@@ -713,16 +720,25 @@ function App() {
         delete newOldDueDates[id];
         setOldDueDates(newOldDueDates);
         
+        // แสดงข้อความสำเร็จ
         const successMessage = isCompleted 
           ? 'ลบงานออกจากระบบถาวรแล้ว!' 
           : 'ลบงานสำเร็จ!';
-        alert(successMessage);
+        setSuccessMsg(successMessage);
+        // เคลียร์ข้อความหลัง 3 วินาที
+        setTimeout(() => setSuccessMsg(''), 3000);
       }
       
     } catch (err) {
       console.error('❌ Unexpected error in handleDeleteJob:', err);
-      alert('เกิดข้อผิดพลาดที่ไม่คาดคิด: ' + err.message);
+      setErrorMsg('เกิดข้อผิดพลาดที่ไม่คาดคิด: ' + err.message);
     }
+  };
+
+  // ฟังก์ชันยกเลิกการลบ
+  const cancelDeleteJob = () => {
+    setShowDeleteModal(false);
+    setJobToDelete(null);
   };
 
   // ฟังก์ชันเพิ่มงาน
@@ -1230,7 +1246,8 @@ function App() {
         }
 
         setIsKoreanMode(true);
-        alert(`แปลเสร็จแล้ว!\nJob Titles: ${jobsToTranslate.length} รายการ\nRemarks: ${remarksToTranslate.length} รายการ`);
+        setTranslationResults({ jobTitles: jobsToTranslate.length, remarks: remarksToTranslate.length });
+        setShowTranslationCompleteModal(true);
         
       } catch (error) {
         console.error('Error during bulk translation:', error);
@@ -1457,6 +1474,37 @@ function App() {
           {errorMsg}
           <button 
             onClick={() => setErrorMsg('')}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'white',
+              marginLeft: '8px',
+              cursor: 'pointer'
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+      
+      {/* แสดง success message */}
+      {successMsg && (
+        <div style={{ 
+          position: 'fixed', 
+          top: '50px', 
+          right: '10px', 
+          background: '#28a745', 
+          color: 'white', 
+          padding: '8px 12px', 
+          borderRadius: '4px',
+          fontSize: '14px',
+          zIndex: 1000,
+          maxWidth: '300px',
+          wordWrap: 'break-word'
+        }}>
+          {successMsg}
+          <button 
+            onClick={() => setSuccessMsg('')}
             style={{
               background: 'transparent',
               border: 'none',
@@ -1864,10 +1912,108 @@ function App() {
         </div>
       )}
 
+      {/* Modal สำหรับแจ้งผลการแปลเสร็จ */}
+      {showTranslationCompleteModal && (
+        <div className="modal-backdrop">
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setShowTranslationCompleteModal(false)}>×</button>
+            <div style={{ padding: '20px', textAlign: 'center' }}>
+              <h2 style={{ marginBottom: '20px', color: '#28a745' }}>🎉 แปลเสร็จแล้ว!</h2>
+              <div style={{ 
+                background: '#d4edda', 
+                border: '1px solid #c3e6cb', 
+                borderRadius: '8px',
+                padding: '15px',
+                marginBottom: '20px'
+              }}>
+                <p style={{ margin: '0 0 10px 0', fontSize: '16px', color: '#155724' }}>
+                  ✅ <strong>Job Titles:</strong> {translationResults.jobTitles} รายการ
+                </p>
+                <p style={{ margin: '0', fontSize: '16px', color: '#155724' }}>
+                  ✅ <strong>Remarks:</strong> {translationResults.remarks} รายการ
+                </p>
+              </div>
+              <div style={{ fontSize: '14px', color: '#6c757d', marginBottom: '20px' }}>
+                การแปลทั้งหมดเสร็จสิ้นแล้ว ตอนนี้อยู่ในโหมดภาษาเกาหลี
+              </div>
+              <button 
+                onClick={() => setShowTranslationCompleteModal(false)}
+                style={{
+                  background: '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  padding: '10px 20px',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  fontWeight: '500',
+                  minWidth: '100px'
+                }}
+              >
+                ✓ รับทราบ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal สำหรับยืนยันการลบงาน */}
+      {showDeleteModal && jobToDelete && (
+        <div className="modal-backdrop">
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <button className="modal-close" onClick={cancelDeleteJob}>×</button>
+            <div style={{ padding: '20px', textAlign: 'center' }}>
+              <h2 style={{ marginBottom: '15px', color: '#dc3545' }}>🗑️ ยืนยันการลบ</h2>
+              <p style={{ margin: '0 0 20px 0', fontSize: '16px', color: '#333' }}>
+                ต้องการลบงาน <strong>"{jobToDelete.title}"</strong> หรือไม่?
+              </p>
+              {jobToDelete.status === 'เสร็จแล้ว' && (
+                <p style={{ margin: '0 0 20px 0', fontSize: '14px', color: '#856404', background: '#fff3cd', padding: '10px', borderRadius: '4px' }}>
+                  ⚠️ งานนี้จะถูกลบออกจากระบบถาวร
+                </p>
+              )}
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                <button 
+                  onClick={confirmDeleteJob}
+                  style={{
+                    background: '#dc3545',
+                    color: 'white',
+                    border: 'none',
+                    padding: '10px 20px',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    fontWeight: '500'
+                  }}
+                >
+                  ลบ
+                </button>
+                <button 
+                  onClick={cancelDeleteJob}
+                  style={{
+                    background: '#6c757d',
+                    color: 'white',
+                    border: 'none',
+                    padding: '10px 20px',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    fontWeight: '500'
+                  }}
+                >
+                  ยกเลิก
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
         <h1 style={{ margin: '0' }}>Coilmaster Electronics - Weekly Job Dashboard</h1>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           <button 
+            key="korean-mode-button"
             onClick={toggleKoreanMode}
             disabled={translatingAll}
             style={{
@@ -1884,7 +2030,9 @@ function App() {
               alignItems: 'center',
               gap: '6px',
               boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-              opacity: translatingAll ? 0.6 : 1
+              opacity: translatingAll ? 0.6 : 1,
+              position: 'relative',
+              zIndex: 1
             }}
             onMouseEnter={(e) => {
               if (!translatingAll) {
@@ -1900,8 +2048,7 @@ function App() {
             }}
             title={isKoreanMode ? "ปิดโหมดภาษาเกาหลี" : "เปิดโหมดภาษาเกาหลี - แปลทั้งหมด"}
           >
-            {translatingAll ? '⏳' : (isKoreanMode ? '🇹🇭' : '🇰🇷')}
-            {translatingAll ? ' กำลังแปล...' : (isKoreanMode ? ' Thai' : ' Korean')}
+            {translatingAll ? '⏳ กำลังแปล...' : (isKoreanMode ? 'TH' : 'KR')}
           </button>
           <button 
             onClick={handleCapture}
@@ -1951,7 +2098,7 @@ function App() {
           <div className="people-selection" style={{ border: '1px solid #ccc', borderRadius: '3px', padding: '4px', marginBottom: '4px' }}>
             <div style={{ marginBottom: '4px', fontWeight: 'bold', color: '#555', fontSize: '12px' }}>เลือกผู้รับผิดชอบ:</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '2px', fontSize: '11px' }}>
-              {['Aoair', 'Neno', 'Sam', 'Fin', 'Toy', 'Katae', 'Ning', 'Noi', 'Paew', 'Toei', 'Pop', 'June', 'Heng', 'Ao', 'Donut', 'Ploy', 'Garfield', 'ALL'].map(person => (
+              {['Aoair', 'Neno', 'Sam', 'Finch', 'Toy', 'Katae', 'Ning', 'Noi', 'Paew', 'Toei', 'Pop', 'June', 'Heng', 'Woo', 'Donut', 'Ploy', 'Garfield', 'ALL'].map(person => (
                 <label key={person} style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', padding: '1px' }}>
                   <input
                     type="checkbox"
