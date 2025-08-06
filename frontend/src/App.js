@@ -46,6 +46,7 @@ function App() {
   const [newJob, setNewJob] = useState('');
   const [selectedPeople, setSelectedPeople] = useState([]); // For multiple selection
   const [newDueDate, setNewDueDate] = useState('');
+  const [newDepartment, setNewDepartment] = useState(''); // เพิ่ม state สำหรับ department
   const [newRemark, setNewRemark] = useState('');
   const [loading, setLoading] = useState(true);
   const [operationLoading, setOperationLoading] = useState(false);
@@ -54,6 +55,10 @@ function App() {
   const [animatingJobId, setAnimatingJobId] = useState(null); // State สำหรับควบคุม Animation
   const [editingDueDateId, setEditingDueDateId] = useState(null);
   const [newDueDateValue, setNewDueDateValue] = useState('');
+  const [editingAssigneeId, setEditingAssigneeId] = useState(null); // สำหรับแก้ไข Assignee
+  const [newAssigneeValue, setNewAssigneeValue] = useState(''); // ค่า Assignee ใหม่
+  const [editingDepartmentId, setEditingDepartmentId] = useState(null); // สำหรับแก้ไข Department
+  const [newDepartmentValue, setNewDepartmentValue] = useState(''); // ค่า Department ใหม่
   const [oldDueDates, setOldDueDates] = useState({}); // { jobId: [oldDueDate1, oldDueDate2, ...] }
   
   // ระบบ auth ใหม่ - เรียบง่าย
@@ -579,6 +584,156 @@ function App() {
     return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
   };
 
+  // ฟังก์ชันสำหรับแสดงและแก้ไข Assignee
+  const renderAssigneeCell = (job, gapStyle) => {
+    if (editingAssigneeId === job.id) {
+      return (
+        <input
+          type="text"
+          value={newAssigneeValue}
+          onChange={e => setNewAssigneeValue(e.target.value)}
+          onBlur={() => {
+            if (newAssigneeValue !== job.assigned_to) {
+              handleSaveAssignee(job.id, newAssigneeValue);
+            } else {
+              setEditingAssigneeId(null);
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              if (newAssigneeValue !== job.assigned_to) {
+                handleSaveAssignee(job.id, newAssigneeValue);
+              } else {
+                setEditingAssigneeId(null);
+              }
+            } else if (e.key === 'Escape') {
+              setEditingAssigneeId(null);
+              setNewAssigneeValue('');
+            }
+          }}
+          autoFocus
+          style={{
+            width: '100%',
+            border: '1px solid #007bff',
+            borderRadius: '4px',
+            padding: '4px 8px',
+            fontSize: '13px'
+          }}
+          placeholder="ผู้รับผิดชอบ"
+          disabled={job.status === 'เสร็จแล้ว' || !currentUser}
+        />
+      );
+    }
+
+    return (
+      <div 
+        style={{ 
+          cursor: job.status !== 'เสร็จแล้ว' && currentUser ? 'pointer' : 'default',
+          padding: '4px 8px',
+          borderRadius: '4px',
+          transition: 'background-color 0.2s',
+          minHeight: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          backgroundColor: job.status !== 'เสร็จแล้ว' && currentUser ? 'transparent' : '#f8f9fa'
+        }}
+        onClick={() => {
+          if (job.status !== 'เสร็จแล้ว' && currentUser) {
+            handleEditAssignee(job.id, job.assigned_to);
+          }
+        }}
+        onMouseEnter={(e) => {
+          if (job.status !== 'เสร็จแล้ว' && currentUser) {
+            e.target.style.backgroundColor = '#f0f8ff';
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (job.status !== 'เสร็จแล้ว' && currentUser) {
+            e.target.style.backgroundColor = 'transparent';
+          }
+        }}
+        title={job.status !== 'เสร็จแล้ว' && currentUser ? 'คลิกเพื่อแก้ไขผู้รับผิดชอบ' : ''}
+      >
+        {job.assigned_to || '-'}
+      </div>
+    );
+  };
+
+  // ฟังก์ชันสำหรับแสดงและแก้ไข Department
+  const renderDepartmentCell = (job, gapStyle) => {
+    if (editingDepartmentId === job.id) {
+      return (
+        <input
+          type="text"
+          value={newDepartmentValue}
+          onChange={e => setNewDepartmentValue(e.target.value)}
+          onBlur={() => {
+            if (newDepartmentValue !== job.department) {
+              handleSaveDepartment(job.id, newDepartmentValue);
+            } else {
+              setEditingDepartmentId(null);
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              if (newDepartmentValue !== job.department) {
+                handleSaveDepartment(job.id, newDepartmentValue);
+              } else {
+                setEditingDepartmentId(null);
+              }
+            } else if (e.key === 'Escape') {
+              setEditingDepartmentId(null);
+              setNewDepartmentValue('');
+            }
+          }}
+          autoFocus
+          style={{
+            width: '100%',
+            border: '1px solid #007bff',
+            borderRadius: '4px',
+            padding: '4px 8px',
+            fontSize: '13px'
+          }}
+          placeholder="แผนก"
+          disabled={job.status === 'เสร็จแล้ว' || !currentUser}
+        />
+      );
+    }
+
+    return (
+      <div 
+        style={{ 
+          cursor: job.status !== 'เสร็จแล้ว' && currentUser ? 'pointer' : 'default',
+          padding: '4px 8px',
+          borderRadius: '4px',
+          transition: 'background-color 0.2s',
+          minHeight: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          backgroundColor: job.status !== 'เสร็จแล้ว' && currentUser ? 'transparent' : '#f8f9fa'
+        }}
+        onClick={() => {
+          if (job.status !== 'เสร็จแล้ว' && currentUser) {
+            handleEditDepartment(job.id, job.department);
+          }
+        }}
+        onMouseEnter={(e) => {
+          if (job.status !== 'เสร็จแล้ว' && currentUser) {
+            e.target.style.backgroundColor = '#f0f8ff';
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (job.status !== 'เสร็จแล้ว' && currentUser) {
+            e.target.style.backgroundColor = 'transparent';
+          }
+        }}
+        title={job.status !== 'เสร็จแล้ว' && currentUser ? 'คลิกเพื่อแก้ไขแผนก' : ''}
+      >
+        {job.department || '-'}
+      </div>
+    );
+  };
+
   // ฟังก์ชันจัดเรียงงาน: 1) ยังไม่เสร็จ+มี due_date (วันใกล้สุดก่อน), 2) ยังไม่เสร็จ+ไม่มี due_date, 3) เสร็จแล้ว (ล่างสุด)
   const sortJobs = (jobsArray) => {
     console.log('sortJobs called with:', jobsArray.length, 'jobs');
@@ -751,6 +906,7 @@ function App() {
     const newJobTitle = newJob.trim();
     const newJobAssignee = selectedPeople.length > 0 ? selectedPeople.join(', ') : '';
     const newJobDueDate = newDueDate.trim();
+    const newJobDepartment = newDepartment.trim();
 
     if (!newJobTitle) {
       alert('กรุณากรอกหัวข้องาน');
@@ -768,8 +924,8 @@ function App() {
         .insert({
           title: newJobTitle,
           assigned_to: newJobAssignee,
+          department: newJobDepartment || null, // เปิดใช้งานคอลัมน์ department
           user_id: currentUser.id,
-          assigned_date: new Date().toISOString().slice(0, 10),
           status: 'ดำเนินการอยู่',
           due_date: newJobDueDate || null,
           due_date_history: [] // เพิ่มบรรทัดนี้
@@ -821,6 +977,7 @@ function App() {
       setNewJob('');
       setSelectedPeople([]); // Clear selected people
       setNewDueDate('');
+      setNewDepartment(''); // เคลียร์ department
       
       setErrorMsg('เพิ่มงานใหม่สำเร็จ! ✅');
       setTimeout(() => setErrorMsg(''), 3000);
@@ -947,6 +1104,68 @@ function App() {
       if (error) {
         alert('เกิดข้อผิดพลาดในการอัปเดตวันที่คาดการณ์');
         console.error('Error updating due date:', error);
+      }
+    }
+  };
+
+  // ฟังก์ชันสำหรับแก้ไข Assignee
+  const handleEditAssignee = (jobId, currentAssignee) => {
+    setEditingAssigneeId(jobId);
+    setNewAssigneeValue(currentAssignee || '');
+  };
+
+  const handleSaveAssignee = async (jobId, newAssignee) => {
+    // อัปเดต local state ทันที
+    const updatedJobs = jobs.map(j => j.id === jobId ? { ...j, assigned_to: newAssignee } : j);
+    setJobs(sortJobs(updatedJobs));
+    setEditingAssigneeId(null);
+    setNewAssigneeValue('');
+    
+    // ถ้าล็อกอินแล้ว ให้บันทึกลง Supabase
+    if (currentUser) {
+      try {
+        const { error } = await supabase
+          .from('jobs')
+          .update({ assigned_to: newAssignee })
+          .eq('id', jobId);
+
+        if (error) {
+          console.error('Error updating assignee:', error);
+          alert('เกิดข้อผิดพลาดในการอัปเดตผู้รับผิดชอบ');
+        }
+      } catch (err) {
+        console.error('Unexpected error saving assignee:', err);
+      }
+    }
+  };
+
+  // ฟังก์ชันสำหรับแก้ไข Department
+  const handleEditDepartment = (jobId, currentDepartment) => {
+    setEditingDepartmentId(jobId);
+    setNewDepartmentValue(currentDepartment || '');
+  };
+
+  const handleSaveDepartment = async (jobId, newDepartment) => {
+    // อัปเดต local state ทันที
+    const updatedJobs = jobs.map(j => j.id === jobId ? { ...j, department: newDepartment } : j);
+    setJobs(sortJobs(updatedJobs));
+    setEditingDepartmentId(null);
+    setNewDepartmentValue('');
+    
+    // ถ้าล็อกอินแล้ว ให้บันทึกลง Supabase
+    if (currentUser) {
+      try {
+        const { error } = await supabase
+          .from('jobs')
+          .update({ department: newDepartment })
+          .eq('id', jobId);
+
+        if (error) {
+          console.error('Error updating department:', error);
+          alert('เกิดข้อผิดพลาดในการอัปเดตแผนก');
+        }
+      } catch (err) {
+        console.error('Unexpected error saving department:', err);
       }
     }
   };
@@ -1295,13 +1514,13 @@ function App() {
     }
     // เตรียมข้อมูลสำหรับ Excel
     const headers = [
-      "ลำดับ", "เนื้อหางาน", "ผู้รับผิดชอบ", "วันที่ได้รับงาน", "วันที่คาดการ", "วันที่เสร็จ", "หมายเหตุ", "สถานะ", "วันที่สร้าง", "วันที่อัปเดต"
+      "ลำดับ", "เนื้อหางาน", "ผู้รับผิดชอบ", "แผนก", "วันที่คาดการ", "วันที่เสร็จ", "หมายเหตุ", "สถานะ", "วันที่สร้าง", "วันที่อัปเดต"
     ];
     const data = completedJobs.map((job, index) => [
       index + 1,
       job.title || '',
       job.assigned_to || '',
-      formatDateToYYMMDD(job.assigned_date) || '',
+      job.department || '',
       formatDateToYYMMDD(job.due_date) || '',
       job.completed_date ? formatDateToYYMMDD(job.completed_date) : '-',
       job.remark || '',
@@ -2088,14 +2307,14 @@ function App() {
       {isLoggedIn && (
         <div className="add-job">
           <textarea // เปลี่ยนจาก input เป็น textarea
-            rows="3" // กำหนดความสูงเริ่มต้น
+            rows="4" // เพิ่มความสูงขึ้น
             placeholder="หัวข้อใหม่" // ย้าย placeholder มาที่นี่
             value={newJob}
             onChange={(e) => setNewJob(e.target.value)}
             disabled={!currentUser}
-            style={{ width: '100%', minHeight: '60px', boxSizing: 'border-box', resize: 'vertical' }} // เพิ่ม style
+            style={{ width: '85%', minHeight: '80px', boxSizing: 'border-box', resize: 'vertical', marginBottom: '8px' }} // ลดความกว้างจาก 100% เป็น 85%
           />
-          <div className="people-selection" style={{ border: '1px solid #ccc', borderRadius: '3px', padding: '4px', marginBottom: '4px' }}>
+          <div className="people-selection" style={{ border: '1px solid #ccc', borderRadius: '3px', padding: '4px', marginBottom: '8px' }}>
             <div style={{ marginBottom: '4px', fontWeight: 'bold', color: '#555', fontSize: '12px' }}>เลือกผู้รับผิดชอบ:</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '2px', fontSize: '11px' }}>
               {['Aoair', 'Neno', 'Sam', 'Finch', 'Toy', 'Katae', 'Ning', 'Noi', 'Paew', 'Toei', 'Pop', 'June', 'Heng', 'Woo', 'Donut', 'Ploy', 'Garfield', 'ALL'].map(person => (
@@ -2123,13 +2342,25 @@ function App() {
               </div>
             )}
           </div>
-          <input
-            type="date"
-            value={newDueDate}
-            onChange={(e) => setNewDueDate(e.target.value)}
-            placeholder="วันที่ครบกำหนด"
-            disabled={!currentUser}
-          />
+          <div style={{ marginBottom: '8px' }}>
+            <input
+              type="text"
+              value={newDepartment}
+              onChange={(e) => setNewDepartment(e.target.value)}
+              placeholder="แผนก"
+              disabled={!currentUser}
+              style={{ width: '100%', boxSizing: 'border-box', padding: '8px', border: '1px solid #ccc', borderRadius: '3px', marginBottom: '8px' }}
+            />
+            <div style={{ fontSize: '12px', color: '#555', marginBottom: '2px' }}>Due date</div>
+            <input
+              type="date"
+              value={newDueDate}
+              onChange={(e) => setNewDueDate(e.target.value)}
+              placeholder="วันที่ครบกำหนด"
+              disabled={!currentUser}
+              style={{ width: '100%', boxSizing: 'border-box', padding: '8px', border: '1px solid #ccc', borderRadius: '3px' }}
+            />
+          </div>
           <button 
             onClick={handleAddJob} 
             disabled={!currentUser || operationLoading}
@@ -2160,21 +2391,21 @@ function App() {
         <table className="job-table job-table-animated" key={`job-table-${jobs.length}`}>
           <colgroup>
             <col style={{ width: '5%' }} />{/* ลำดับ */}
-            <col style={{ width: '22%' }} />{/* เนื้อหางาน - ปรับลด */}
+            <col style={{ width: '22%' }} />{/* เนื้อหางาน */}
             <col style={{ width: '10%' }} />{/* ผู้รับผิดชอบ */}
-            <col style={{ width: '10%' }} />{/* วันที่ได้รับงาน */}
-            <col style={{ width: '12%' }} />{/* วันที่คาดการ - เพิ่มความกว้าง */}
+            <col style={{ width: '10%' }} />{/* แผนก */}
+            <col style={{ width: '12%' }} />{/* วันที่คาดการ */}
             <col style={{ width: '10%' }} />{/* วันที่เสร็จ */}
             <col style={{ width: '15%' }} />{/* หมายเหตุ */}
             <col style={{ width: '10%' }} />{/* สถานะ */}
-            <col style={{ width: '8%' }} />{/* ดำเนินการ - ปรับลด */}
+            <col style={{ width: '8%' }} />{/* ดำเนินการ */}
           </colgroup>
           <thead>
             <tr>
               <th>No.</th>
               <th>Job Title</th>
               <th>Assignee</th>
-              <th>Assigned Date</th>
+              <th>Department</th>
               <th>Due Date</th>
               <th>Completed Date</th>
               <th>Remarks</th>
@@ -2228,8 +2459,12 @@ function App() {
                           </div>
                         </div>
                       </td>
-                      <td style={gapStyle}>{job.assigned_to || '-'}</td>
-                      <td style={gapStyle}>{formatDateToYYMMDD(job.assigned_date)}</td>
+                      <td style={gapStyle}>
+                        {renderAssigneeCell(job, gapStyle)}
+                      </td>
+                      <td style={gapStyle}>
+                        {renderDepartmentCell(job, gapStyle)}
+                      </td>
                       <td style={gapStyle}>
                         {renderDueDateCell(job, gapStyle)}
                       </td>
@@ -2314,8 +2549,12 @@ function App() {
                           </div>
                         </div>
                       </td>
-                      <td style={gapStyle}>{job.assigned_to || '-'}</td>
-                      <td style={gapStyle}>{formatDateToYYMMDD(job.assigned_date)}</td>
+                      <td style={gapStyle}>
+                        {renderAssigneeCell(job, gapStyle)}
+                      </td>
+                      <td style={gapStyle}>
+                        {renderDepartmentCell(job, gapStyle)}
+                      </td>
                       <td style={gapStyle}>
                         {renderDueDateCell(job, gapStyle)}
                       </td>
